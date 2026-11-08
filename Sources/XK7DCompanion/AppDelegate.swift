@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func setUpOrgan(_ sender: Any?) {
         guard model.isConnected else {
-            model.announcer.announce("Not connected. Choose the organ or the simulator first.", force: true)
+            model.announcer.announce(model.notConnectedMessage, force: true)
             return
         }
         let steps = model.setupSteps()
@@ -237,9 +237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Browse or search every setting in the list. Each row shows its value; "not heard yet" means the organ has not reported it. Press Tab to reach the editor; changes are sent at once.
 
-        Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift M mute, Command Shift L repeat the last announcement, Command 2 the simulator, Command comma settings.
+        Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift U set up the organ, Command Shift M mute, Command Shift L repeat the last announcement, Command S save the last organ snapshot, Command 1 this window, Command 2 the simulator, Command comma settings.
 
         To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx.
+
+        If the organ is unplugged or turned off, the app says so, and connects again by itself when the organ comes back.
         """
         alert.runModal()
     }

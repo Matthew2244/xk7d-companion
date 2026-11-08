@@ -139,6 +139,15 @@ final class SettingsWindowController: NSWindowController {
         w.title = "\(AppIdentity.name) Settings"
         super.init(window: w)
         build()
+        NotificationCenter.default.addObserver(self, selector: #selector(deviceIDMayHaveChanged), name: .connectionChanged, object: nil)
+    }
+
+    /// Show a Device ID learned from the organ while this window is open (unless it's being typed in).
+    @objc private func deviceIDMayHaveChanged() {
+        guard deviceField.currentEditor() == nil else { return }
+        let id = Int(model.session.addressing.deviceID)
+        deviceField.integerValue = id
+        deviceStepper.integerValue = id
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -211,6 +220,26 @@ final class SettingsWindowController: NSWindowController {
             root.topAnchor.constraint(equalTo: content.topAnchor),
         ])
         window?.autorecalculatesKeyViewLoop = true
+    }
+
+    /// The window is built once, so read the current values each time it opens. Otherwise a Device
+    /// ID learned from the organ since then would be shown stale, and written back over the learned
+    /// one by the next change made here.
+    override func showWindow(_ sender: Any?) {
+        reload()
+        super.showWindow(sender)
+    }
+
+    func reload() {
+        methodPopup.selectItem(at: Announcer.Method.allCases.firstIndex(of: model.announcer.method) ?? 0)
+        backgroundCheckbox.state = model.announcer.macVoiceInBackground ? .on : .off
+        let settle = Int((model.session.coalescer.settle * 1000).rounded())
+        settleStepper.integerValue = settle
+        settleField.integerValue = settle
+        let a = model.session.addressing
+        deviceStepper.integerValue = Int(a.deviceID)
+        deviceField.integerValue = Int(a.deviceID)
+        for (popup, ch) in zip(channelPopups, [a.upperChannel, a.lowerChannel, a.pedalChannel]) { popup.selectItem(at: ch) }
     }
 
     private func hrow(_ v: NSView...) -> NSStackView {

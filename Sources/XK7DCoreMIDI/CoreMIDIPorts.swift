@@ -9,10 +9,7 @@ public struct MIDIPortInfo: Hashable, Sendable {
     public let isVirtualSimulator: Bool
 
     /// Loose match for the organ's USB port: "XK-7", "XK-7D", "Hammond", any spacing or case.
-    public var looksLikeXK7: Bool {
-        let n = name.lowercased().replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "-", with: "")
-        return n.contains("xk7") || n.contains("hammond") || n.contains("suzuki")
-    }
+    public var looksLikeXK7: Bool { PortPolicy.looksLikeOrgan(name) }
 }
 
 public enum CoreMIDIError: Error, CustomStringConvertible {

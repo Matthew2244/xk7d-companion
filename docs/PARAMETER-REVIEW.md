@@ -63,7 +63,7 @@ the other controllers (pp. 176-177) are handled in code, not in the table.
 | Parameter | What the manual says | What the app does | Confidence |
 |---|---|---|---|
 | Tone wheel brake range (18 00) | Data `34 – 64 – 4C (-24 – 0 – +12)`. 34h is -12, not -24, from a centre of 40h. The menu page (p. 100) says -24 to +12. | Raw 28h to 4Ch, centre 40h (-24 to +12). | Inferred. The top and centre agree with both readings; only the bottom differs. |
-| Vibrato mode (12 01) | `00 – 05 (V1 – C3)`; no order given. | V-1, V-2, V-3, C-1, C-2, C-3 (the panel order, pp. 12, 58). | **Guess.** The B-3 knob order (V1, C1, V2, C2, V3, C3) is equally possible. Needs the organ. |
+| Vibrato mode (12 01) | `00 – 05 (V1 – C3)`; no order given. | V-1, C-1, V-2, C-2, V-3, C-3: the order the positions are printed around the knob on p. 58, clockwise from V-1, and the B-3's. (1.0 used V-1, V-2, V-3, C-1, C-2, C-3.) | **Inferred** from the drawing. Needs the organ. |
 | Custom cabinet (12 0E), custom TW / pipe / sub drawbars (10 07, 10 09, 1F 04), custom contact (10 08) | MIDI tables: `U1 – F10`, `U1 – F4`, `U1 – F3`. Menu pages: "U1 – U10, F1 – F10" for the Leslie cabinet (p. 119), "F1 – F4, U1 – U4" for others, and "U1 – U4, F1 – F4" for the custom contact set (p. 84), which also disagrees with the MIDI table's six values. | User sets first, then Factory. | Unresolved; follows the MIDI tables. |
 | Fold-back keys (10 00 00 00 03 / 04) | MIDI table: `00 – 0C (TW#01 – #12)`, 13 values for 12 names, and `00 – 05 (TW#91 – #96)`. | Keys 1C to 2C and 4G to 5C. | **Settled** by the menu (p. 109), which shows these keys; the counts match. |
 | Percussion decay (11 06, 11 07) | `00 – 18 (0 – 24)`. | 1 to 24, then Cont. | **Settled** by the menu (p. 85): "1 – 24, Cont" is exactly 25 values. |
@@ -77,6 +77,7 @@ the other controllers (pp. 176-177) are handled in code, not in the table.
 | Foot switch modes (03 00-04) | Range `00 – 28` but lists 29 and 2A (To Adjust A♯/B). | 00 to 2A. | Confident. |
 | Organ sounding point (09 01) | `00 – 07 (Patch, 1 – 7, Velocity)`: nine names for eight values. | Patch, 1-6, Velocity. | **Settled** by the menu (p. 137). |
 | Pedal sub drawbar level (31 00 00 0g 0k) | `00 – 08 (0 – 9)`. | Shows the raw 0 to 8. | The display may read 1-9 or 0-9. |
+| Custom pipe stop assign (51 00 0p 0x 00) | Range `00 00 – 00 2D (C-Open Diapason – P-Cornopean)`, but 2D is the 46th stop, and the stop list on p. 174 has P-Cornopean at 44, then Reserved 1 and 2. | 46 stops, S01 to S46, ending with the two Reserved entries. | Confident. The manual's label for the end of the range is off by two; its example (S04 = `00 03`) matches. |
 | Custom pipe, Pedal part (51 00 0p 0x ..) | Part list says 3 = Pedal; footage note says "(p=2) 0, 1 = 16´, 8´". | Part 3 for Pedal, drawbars 16´ and 8´. | **Guess.** Could be part 2. Needs the organ. |
 | Impedance (14 00 00 nn 0g) | Does not say which footages g covers. | The nine manual footages. | Guess. |
 | Leslie horn/drum level (43 00 00 0r 00) | Length 02, but the data is written as single bytes `00, 01 – 4D`. | Two bytes, `00 00` to `00 4D`. | Follows the length column. |
@@ -89,6 +90,16 @@ the other controllers (pp. 176-177) are handled in code, not in the table.
 | Expression Source example (p. 185) | SysEx example `... 04 00 01` and the table (Source = NRPN 04 00) agree, but the printed NRPN example reads `Bx 63 04 Bx 62 01 Bx 06 01`, which is the Device parameter. | Follows the table: 63 04 62 00. A unit test records the misprint. | Confident; misprint in the example. |
 | Device ID | Range 0-127, no stated default. | Default 0, and the app adopts whatever ID the organ answers with. | The p. 157 screenshot shows 0. |
 | Dump check digit | "Lower 7 bits of XOR [DATA]". | XOR of the 128 nibblized bytes; incoming packets are accepted if either the nibblized or decoded reading matches, and the app records which. | Ambiguous until a real dump is captured. |
+
+## Second check (1.0.1)
+
+An independent reviewer compared a fresh sample of about 48 rows, spread over
+every page from 176 to 185 and avoiding the rows above, with the page images:
+address bytes, NRPN, length, raw range, display scaling at both ends and the
+centre, and every choice label and its order. No errors were found. The only
+new note is the stop assign label above. Pages 176 and 177 (drawbar
+controllers and levels, program change banks, other controllers, NRPN and
+identity) also matched the code.
 
 ## Still to confirm on a real organ
 

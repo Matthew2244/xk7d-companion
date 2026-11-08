@@ -1,6 +1,6 @@
 # Hand-off notes
 
-Version 1.0 has been tested against the built-in simulator only. It hasn't been
+Version 1.0.1 has been tested against the built-in simulator only. It hasn't been
 connected to a real XK-7D.
 
 ## Architecture
@@ -95,11 +95,14 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Values the MIDI tables left unclear (fold-back keys, percussion decay, external zone program numbers, sounding point, mic distance, preset key hold time) | Menu pages 85, 100, 103, 109, 121 and 137; unit tests |
 | The built .app | Silent self-test (`XK7D_SELFTEST=path`), run repeatedly; accessibility tree read with `tools/ax-inspect.swift`: every control labelled, slider values read as the display shows them, every command in a menu with a shortcut |
 
-Tests: 72 unit tests and 5 integration tests.
+Tests: 85 unit tests and 5 integration tests.
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
-- Vibrato mode order (assumed V-1, V-2, V-3, C-1, C-2, C-3).
+- Vibrato mode order. 1.0 assumed V-1, V-2, V-3, C-1, C-2, C-3. 1.0.1 uses
+  V-1, C-1, V-2, C-2, V-3, C-3, the order the positions are printed around
+  the knob on p. 58 (clockwise from V-1), which is also the B-3's. Still a
+  reading of a drawing, not a statement.
 - Custom Pipe Pedal uses part 3 (the manual also suggests 2).
 - Tone wheel brake range bottom (-24, raw 28h; the table prints 34h, and
   the menu page says -24).
@@ -121,9 +124,18 @@ Tests: 72 unit tests and 5 integration tests.
 1. **Whether every panel edit is transmitted**, and how: with Individual
    Parameters on NRPN and on SysEx. Especially menu edits (custom Leslie
    values, tone wheel tables) and patch recall: does recalling a patch send
-   all its parameters, or only a program change?
-2. **Device ID default** (the p. 157 screenshot shows 0) and whether the
-   organ answers Identity Request on all-call.
+   all its parameters, or only a program change? If it sends them all, the
+   app now says the first change and a count ("Upper: patch U05, and 40 more
+   settings changed") instead of reading each one. More than 8 settings
+   changing together counts as a burst.
+   Also: p. 156 says the Upper, Lower and Pedal transmit channels are left
+   out when External Zones are on. If that includes NRPN and drawbars on the
+   Upper channel, nothing would be announced while External Zones are on.
+   Worth checking first if the organ seems silent.
+2. **Device ID default** (the p. 157 screenshot shows 0; the text gives only
+   the range) and whether the organ answers Identity Request on all-call.
+   p. 157 says the organ ignores SysEx with a different Device ID, which is
+   why the app asks on all-call too and adopts the ID the organ answers with.
 3. **Echoes**: does the organ send back a value it receives? (The app
    handles both.)
 4. **Dump**: does a Dump Request get a reply; which check digit reading
@@ -142,6 +154,31 @@ Tests: 72 unit tests and 5 integration tests.
 8. The XK-7D's USB MIDI port name, so the app recognises it on first launch.
    It matches anything containing "XK-7", "Hammond" or "Suzuki", in any case,
    with or without spaces and hyphens.
+
+## Changes in 1.0.1 (independent review)
+
+- Unplugging the organ is said once ("Organ disconnected"), and the app
+  connects again by itself when the port comes back ("Organ connected
+  again"). Before, it stayed attached to the old port and never reconnected,
+  and every later MIDI setup change repeated "Organ disconnected". While the
+  organ is gone, edits aren't pretended to be sent.
+- An organ plugged in after launch is picked up if nothing was chosen (unless
+  the person chose Disconnect).
+- At launch a plugged-in organ beats a remembered simulator.
+- A burst of more than 8 settings is spoken as one line with a count.
+- Typing a value and pressing Return now confirms what was sent. VoiceOver
+  says nothing when a text field is submitted, so it was silent before.
+- Pressing Return in an empty name field no longer blanks the name on the
+  organ. Typographic quotes and dashes in names become plain ASCII.
+- Return in the search field with no matches says so.
+- Home and End on a slider now tell VoiceOver the value changed.
+- The Settings window rereads its values when opened and shows a learned
+  Device ID. Before, it was built once and could write a stale Device ID back
+  over the one learned from the organ.
+- Vibrato mode order, see above.
+
+Port choice lives in `XK7DCore/PortPolicy.swift` so it can be tested without
+CoreMIDI; `Tests/XK7DCoreTests/ReviewFixTests.swift` covers it.
 
 ## Lost first message
 

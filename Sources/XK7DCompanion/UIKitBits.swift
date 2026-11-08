@@ -63,14 +63,22 @@ final class ParameterSlider: NSSlider {
         NSAccessibility.post(element: self, notification: .valueChanged)
     }
 
+    private func jump(to value: Int) {
+        guard known else { onUnknownStep?(); return }
+        guard value != raw else { return }
+        raw = value
+        onCommit?(value)
+        NSAccessibility.post(element: self, notification: .valueChanged)
+    }
+
     override func keyDown(with event: NSEvent) {
         switch Int(event.keyCode) {
         case 123, 125: step(-1)                      // left, down
         case 124, 126: step(1)                       // right, up
         case 116: step(max(1, (parameter.rawRange.count) / 10))   // page up
         case 121: step(-max(1, (parameter.rawRange.count) / 10))  // page down
-        case 115: guard known else { onUnknownStep?(); return }; raw = parameter.rawRange.lowerBound; onCommit?(raw)   // home
-        case 119: guard known else { onUnknownStep?(); return }; raw = parameter.rawRange.upperBound; onCommit?(raw)   // end
+        case 115: jump(to: parameter.rawRange.lowerBound)   // home
+        case 119: jump(to: parameter.rawRange.upperBound)   // end
         default: super.keyDown(with: event)
         }
     }

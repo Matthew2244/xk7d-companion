@@ -87,8 +87,19 @@ extension Parameter {
 
 /// Text values: the organ uses 7-bit ASCII, padded to 16 characters.
 public enum TextCodec {
+    /// Typographic quotes and dashes (which macOS can put in a text field) become their plain
+    /// ASCII forms, so a name like "Jimmy’s" doesn't reach the organ as "Jimmy?s".
+    public static func plain(_ s: String) -> String {
+        var t = s
+        for (a, b) in [("\u{2018}", "'"), ("\u{2019}", "'"), ("\u{201C}", "\""), ("\u{201D}", "\""),
+                       ("\u{2013}", "-"), ("\u{2014}", "-"), ("\u{00A0}", " ")] {
+            t = t.replacingOccurrences(of: a, with: b)
+        }
+        return t
+    }
+
     public static func encode(_ s: String, length: Int = 16) -> [UInt8] {
-        var bytes = s.unicodeScalars.map { $0.value < 0x80 && $0.value >= 0x20 ? UInt8($0.value) : UInt8(ascii: "?") }
+        var bytes = plain(s).unicodeScalars.map { $0.value < 0x80 && $0.value >= 0x20 ? UInt8($0.value) : UInt8(ascii: "?") }
         if bytes.count > length { bytes = Array(bytes.prefix(length)) }
         while bytes.count < length { bytes.append(0x20) }
         return bytes

@@ -241,7 +241,7 @@ SPECIAL = {
     "leslie_delay": lambda: number(0, 5, 0, 0.0, 0.2, 1, "sec"),
     "decay_pedal": lambda: number(0, 0x0A, 0, 1, 1, 0, "", special=[(0x0A, "Continue")]),
     "sounding_point": lambda: enum(["Patch", "1", "2", "3", "4", "5", "6", "Velocity"]),
-    "vibrato_mode": lambda: enum(["V-1", "V-2", "V-3", "C-1", "C-2", "C-3"]),
+    "vibrato_mode": lambda: enum(["V-1", "C-1", "V-2", "C-2", "V-3", "C-3"]),
     "custom_cabinet": lambda: enum(["U%d" % i for i in range(1, 11)] + ["F%d" % i for i in range(1, 11)]),
     "velocity_curve": lambda: enum(["Off", "1 (hard)", "2", "3", "4 (easy)"]),
     "exz_cc": lambda: enum(["Off", "7 (Volume)", "11 (Expression)"]),
@@ -486,8 +486,8 @@ AN = "Animation Upper & Lower"
 row(AN, "Vibrato Upper", "Vibrato Upper", "12 00", "00 00 00 12 00", "01", "onoff", 180)
 row(AN, "Vibrato Mode", "Vibrato and chorus mode", "12 01", "00 00 00 12 01", "01", "vibrato_mode", 180,
     "The six positions of the VIBRATO AND CHORUS knob.",
-    notes="The manual gives only 00-05 (V1 - C3). This app assumes the panel's order V-1, V-2, V-3, C-1, C-2, C-3 "
-          "(p. 12, p. 58). Confirm on the organ.")
+    notes="The manual gives only 00-05 (V1 - C3). This app assumes the knob's order V-1, C-1, V-2, C-2, V-3, C-3, "
+          "the order the positions are printed around the knob on p. 58 (and the B-3's). Confirm on the organ.")
 row(AN, "Vibrato Type", "Vibrato type", "12 02", "00 00 00 12 02", "01", "enum:Big Box ('57-59)|Small Box ('59 on)|Metal Box ('55-57)", 180,
     "The vibrato delay line: Metal Box (1955-57), Big Silver Box (1957-59), Small Silver Box (1959 on).")
 row(AN, "Vibrato Rate (TW)", "Vibrato rate, tone wheel", "12 03", "00 00 00 12 03", "01", "steps:00-7F:5.78 Hz:7.90 Hz", 180,

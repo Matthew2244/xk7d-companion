@@ -9,21 +9,6 @@ extension Notification.Name {
     static let simulatorChanged = Notification.Name("simulatorChanged")
 }
 
-/// What the "Organ" popup offers.
-enum PortChoice: Equatable {
-    case none
-    case simulator
-    case device(String)
-
-    var title: String {
-        switch self {
-        case .none: return "Not connected"
-        case .simulator: return "Built-in simulator (not a real organ)"
-        case .device(let n): return n
-        }
-    }
-}
-
 /// Owns the session, the MIDI connection, the simulator and the announcer; the windows observe it.
 final class AppModel {
     let database = ParameterDatabase.shared
@@ -60,7 +45,10 @@ final class AppModel {
         }
         session.onAnnouncement = { [weak self] in self?.announcer.announce($0) }
         session.onEvent = { [weak self] event, _ in self?.eventArrived(event) }
-        session.onDeviceIDLearned = { id in UserDefaults.standard.set(Int(id), forKey: "deviceID") }
+        session.onDeviceIDLearned = { id in
+            UserDefaults.standard.set(Int(id), forKey: "deviceID")
+            NotificationCenter.default.post(name: .connectionChanged, object: nil)
+        }
 
         do {
             connection = try CoreMIDIConnection()
@@ -87,28 +75,40 @@ final class AppModel {
         [.none] + deviceNames().map { .device($0) } + [.simulator]
     }
 
-    /// At launch: the port used last time if it is present, else anything that looks like the organ.
+    /// At launch: the port used last time if it is present, else anything that looks like the organ,
+    /// else the simulator if that was used last. A plugged-in organ beats a remembered simulator.
     func connectAtLaunch() {
-        let remembered = UserDefaults.standard.string(forKey: "port")
-        if remembered == "simulator" { choose(.simulator); return }
         let names = deviceNames()
-        if let r = remembered, names.contains(r) { choose(.device(r)); return }
-        if let organ = CoreMIDIConnection.sources().first(where: { $0.looksLikeXK7 && !$0.isVirtualSimulator
-                                                              && !$0.name.hasPrefix("XK-7D Simulator") }) {
-            choose(.device(organ.name)); return
-        }
+        let pick = PortPolicy.launchChoice(remembered: UserDefaults.standard.string(forKey: "port"), devices: names)
+        if pick != .none { choose(pick); return }
         statusText = names.isEmpty
-            ? "No organ found. Connect the XK-7D by USB, or choose the built-in simulator from the Organ menu."
+            ? "No organ found. Connect the XK-7D by USB, or choose the built-in simulator from the Organ popup."
             : "Choose your organ from the Organ popup."
         NotificationCenter.default.post(name: .connectionChanged, object: nil)
     }
 
+    /// True while the chosen organ's port has gone (unplugged or turned off).
+    private(set) var organMissing = false
+
     private func portsChanged() {
-        if case .device(let name) = choice, !deviceNames().contains(name) {
-            statusText = "\(name) was disconnected."
-            announcer.announce("Organ disconnected")
-        } else if choice == .none, let r = UserDefaults.standard.string(forKey: "port"), deviceNames().contains(r) {
-            choose(.device(r))
+        let change = PortPolicy.afterPortsChanged(choice: choice, missing: organMissing,
+                                                  remembered: UserDefaults.standard.string(forKey: "port"),
+                                                  devices: deviceNames())
+        switch change {
+        case .nothing:
+            break
+        case .lost(let name):
+            organMissing = true
+            connection?.disconnect()
+            statusText = "\(name) was disconnected. The app will connect again when it comes back."
+            announcer.announce("Organ disconnected", force: true)
+        case .back(let name):
+            choose(.device(name))
+            announcer.announce("Organ connected again", force: true)
+            return
+        case .found(let name):
+            choose(.device(name))
+            announcer.announce("Organ connected: \(name)", force: true)
             return
         }
         NotificationCenter.default.post(name: .connectionChanged, object: nil)
@@ -116,6 +116,7 @@ final class AppModel {
 
     func choose(_ c: PortChoice, remember: Bool = true) {
         connection?.disconnect()
+        organMissing = false
         session.holdUntilAnswered = false
         session.resetConnection()
         loopback = nil
@@ -189,7 +190,13 @@ final class AppModel {
         }
     }
 
-    var isConnected: Bool { choice != .none && session.output != nil }
+    /// What to say when something needs the organ and there isn't one.
+    var notConnectedMessage: String {
+        organMissing ? "The organ is disconnected, so nothing was sent. Check the USB cable and that the organ is on."
+                     : "Not connected. Choose the organ or the simulator first."
+    }
+
+    var isConnected: Bool { choice != .none && session.output != nil && !organMissing }
 
     // MARK: Values
 
@@ -199,7 +206,7 @@ final class AppModel {
 
     func send(_ setting: Setting, raw: Int) {
         guard isConnected else {
-            announcer.announce("Not connected. Choose the organ or the simulator first.", force: true)
+            announcer.announce(notConnectedMessage, force: true)
             return
         }
         session.set(setting, raw: raw)
@@ -208,7 +215,7 @@ final class AppModel {
 
     func send(_ setting: Setting, text: String) {
         guard isConnected else {
-            announcer.announce("Not connected. Choose the organ or the simulator first.", force: true)
+            announcer.announce(notConnectedMessage, force: true)
             return
         }
         session.set(setting, text: text)
@@ -224,7 +231,7 @@ final class AppModel {
     /// Identity request, then a Temporary dump request. The manual does not publish the dump's
     /// layout, so values cannot be read out of it; the dump is kept as a snapshot file instead.
     func readFromOrgan(completion: @escaping (String) -> Void) {
-        guard isConnected else { completion("Not connected. Choose the organ or the simulator first."); return }
+        guard isConnected else { completion(notConnectedMessage); return }
         readTimeout?.cancel()
         session.requestIdentity()
         session.requestDump(.temporary)

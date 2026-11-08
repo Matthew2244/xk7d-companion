@@ -227,11 +227,22 @@ final class DetailView: NSView {
         }
         commit(raw)
         field.stringValue = ""
+        // VoiceOver says nothing when a text field is submitted, so confirm what was sent.
+        if let s = setting, model?.isConnected == true {
+            model?.announcer.announce("\(s.spokenName): \(p.spoken(s.parameter.clamp(raw)))", force: true)
+        }
     }
 
     @objc private func sendText() {
-        guard let s = setting, let field = textField else { return }
-        model?.send(s, text: field.stringValue)
+        guard let s = setting, let field = textField, let model else { return }
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        // An empty field is most likely an accidental Return; sending it would blank the name.
+        guard !name.isEmpty else {
+            model.announcer.announce("Type a name first. Nothing was sent.", force: true)
+            return
+        }
+        model.send(s, text: name)
+        if model.isConnected { model.announcer.announce("\(s.spokenName) sent: \(model.session.text(of: s) ?? name)", force: true) }
     }
 
     private func commit(_ raw: Int) {

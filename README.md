@@ -18,7 +18,9 @@ It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
 
 - **Speaks changes made on the organ.** For example "Leslie horn fast speed:
   340 rpm", "Upper 8 foot: 6" or "Upper: patch F15". The setting's name comes
-  first. A knob you're turning is spoken once, when it stops.
+  first. A knob you're turning is spoken once, when it stops. If lots of
+  settings change at once, as they might when you recall a patch, you hear
+  the first one and how many others changed.
 - **Lists the settings the manual gives a MIDI address for.** There are 537,
   by category, with a search field. Each row reads "name: value", so you
   don't have to select a setting to hear its value.
@@ -36,7 +38,10 @@ It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
 
 1. Connect the organ to the Mac with a USB cable and open the app. It picks a
    MIDI port whose name contains XK-7, Hammond or Suzuki. If it doesn't, pick
-   the organ in the **Organ** popup.
+   the organ in the **Organ** popup. If you plug the organ in after opening
+   the app, it connects when the organ shows up. If the cable comes out or the
+   organ is turned off, the app says "Organ disconnected", and connects again
+   when it's back.
 2. Choose **Organ > Set Up Organ for This App** (Command Shift U). It offers
    four changes to the organ's MIDI settings, each with a checkbox. Nothing is
    sent until you choose Send to Organ. The one that matters most is
@@ -79,7 +84,8 @@ rest before it's spoken.
 
 ## The simulator
 
-Choose Built-in simulator in the Organ popup. It shows up as a real MIDI port
+Choose Built-in simulator in the Organ popup. If you quit while using it,
+the app opens on the simulator next time, unless the organ is plugged in. It shows up as a real MIDI port
 called "XK-7D Simulator (not a real organ)", so the app talks to it the same
 way it would talk to the organ. Its window (Command 2) has buttons that act
 like the organ's panel. It also logs what it received.

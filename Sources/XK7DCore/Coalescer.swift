@@ -10,6 +10,9 @@ import Foundation
 public final class AnnouncementCoalescer {
     public var settle: TimeInterval
     public var maxWait: TimeInterval
+    /// More than this many different settings changing together (a patch recall that sends every
+    /// parameter, for example) is spoken as one line: the first change and a count of the rest.
+    public var burstLimit = 8
 
     private struct Pending {
         var text: String
@@ -45,6 +48,15 @@ public final class AnnouncementCoalescer {
 
     /// Texts ready to speak at `now`, oldest change first.
     public func due(at now: TimeInterval) -> [String] {
+        if pending.count > burstLimit {
+            // Wait for the whole burst to go quiet, then say it once.
+            let newest = pending.values.map(\.lastAt).max() ?? now
+            let oldest = pending.values.map(\.firstAt).min() ?? now
+            guard now - newest >= settle || now - oldest >= maxWait else { return [] }
+            let texts = pending.values.sorted { $0.order < $1.order }.map(\.text)
+            pending.removeAll()
+            return [Self.summary(texts)]
+        }
         var ready: [(Int, String)] = []
         for (key, p) in pending {
             if now - p.lastAt >= settle || now - p.firstAt >= maxWait {
@@ -53,6 +65,13 @@ public final class AnnouncementCoalescer {
             }
         }
         return ready.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    /// "Upper: patch U05, and 40 more settings changed."
+    static func summary(_ texts: [String]) -> String {
+        guard let first = texts.first else { return "" }
+        let rest = texts.count - 1
+        return rest == 0 ? first : "\(first), and \(rest) more setting\(rest == 1 ? "" : "s") changed"
     }
 
     /// Everything still waiting, regardless of time.

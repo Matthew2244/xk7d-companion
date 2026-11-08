@@ -291,6 +291,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSOutlin
                 window?.makeFirstResponder(outline)
                 outline.selectRowIndexes([0], byExtendingSelection: false)
                 outline.scrollRowToVisible(0)
+            } else if !searchField.stringValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Otherwise Return does nothing and says nothing.
+                model.announcer.announce(searchCountLabel.stringValue, force: true)
             }
             return true
         }
