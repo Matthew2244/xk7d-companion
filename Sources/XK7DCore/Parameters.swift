@@ -173,12 +173,10 @@ public struct Setting: Hashable, Sendable {
 }
 
 public enum ParameterDatabaseError: Error, CustomStringConvertible {
-    case missingResource
     case malformed(String)
 
     public var description: String {
         switch self {
-        case .missingResource: return "parameters.json is missing from the app."
         case .malformed(let s): return "parameters.json could not be read: \(s)"
         }
     }
@@ -192,16 +190,26 @@ public final class ParameterDatabase: @unchecked Sendable {
     private var byNRPN: [UInt16: Parameter] = [:]
     private var byID: [String: Parameter] = [:]
 
+    /// The table compiled into the app. Never crashes: if it can't be read (a broken build), this is
+    /// an empty table and `loadError` says why, so the app can explain instead of quitting.
     public static let shared: ParameterDatabase = {
-        do { return try ParameterDatabase.loadBundled() } catch { fatalError("\(error)") }
+        do { return try ParameterDatabase.loadBundled() } catch {
+            loadError = "\(error)"
+            return ParameterDatabase(empty: ())
+        }
     }()
 
+    /// Set when `shared` couldn't be read.
+    public private(set) static var loadError: String?
+
+    /// The table is compiled in (ParameterTable.swift), not read from a resource file: SwiftPM's
+    /// Bundle.module looks beside the .app and then in the build machine's .build folder, so 1.0.0
+    /// to 1.0.3 crashed at launch on every other Mac.
     public static func loadBundled() throws -> ParameterDatabase {
-        guard let url = Bundle.module.url(forResource: "parameters", withExtension: "json") else {
-            throw ParameterDatabaseError.missingResource
-        }
-        return try ParameterDatabase(data: Data(contentsOf: url))
+        try ParameterDatabase(data: Data(parameterTableJSON.utf8))
     }
+
+    private init(empty: Void) { parameters = [] }
 
     public init(data: Data) throws {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],

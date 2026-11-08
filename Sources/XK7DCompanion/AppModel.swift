@@ -321,7 +321,7 @@ final class AppModel {
             (3.2, { SimulatorAction.nextPatch.perform(on: self.simulator!, database: self.database) }),
             (3.8, { SimulatorAction.moveDrawbar.perform(on: self.simulator!, database: self.database) }),
             (4.5, { self.readFromOrgan { log.append("READ " + $0); write() } }),
-            (8.0, { log.append("SELFTEST DONE"); write(); NSApp.terminate(nil) }),
+            (8.0, { log.append("SELFTEST DONE \(self.database.parameters.count) settings"); write(); NSApp.terminate(nil) }),
         ]
         for (t, f) in steps { DispatchQueue.main.asyncAfter(deadline: .now() + t) { f(); write() } }
     }

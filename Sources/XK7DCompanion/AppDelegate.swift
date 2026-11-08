@@ -16,6 +16,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenus()
+        if let problem = ParameterDatabase.loadError ?? (model.database.parameters.isEmpty ? "the table is empty" : nil) {
+            // A broken build. Say so plainly instead of crashing.
+            if let log = ProcessInfo.processInfo.environment["XK7D_SELFTEST"] {
+                try? "FAILED settings table: \(problem)\n".write(toFile: log, atomically: true, encoding: .utf8)
+                exit(2)
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "\(AppIdentity.name) can't start"
+            alert.informativeText = "The app's list of organ settings couldn't be read, so it can't work. Please download it again from github.com/Matthew2244/xk7d-companion. Details: \(problem)"
+            alert.addButton(withTitle: "Quit")
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         mainWindow = MainWindowController(model: model)
         if let log = ProcessInfo.processInfo.environment["XK7D_SELFTEST"] {
             // Silent self-test: no speech, no focus stealing; results go to the log file.

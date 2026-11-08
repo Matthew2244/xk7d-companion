@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 : "${SIGN_IDENTITY:?set SIGN_IDENTITY}" "${ASC_KEY_ID:?}" "${ASC_ISSUER:?}" "${ASC_KEY_FILE:?}"
 
 scripts/build-app.sh
+scripts/check-packaged.sh
 NAME=$(sed -n 's/.*static let name = "\(.*\)".*/\1/p' Sources/XK7DCompanion/AppDelegate.swift)
 APP="build/$NAME.app"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
@@ -23,4 +24,5 @@ xcrun stapler staple "$APP"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 spctl --assess --type execute --verbose "$APP"
+scripts/check-packaged.sh "$APP"
 echo "Ready: $ZIP"

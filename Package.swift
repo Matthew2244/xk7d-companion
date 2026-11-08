@@ -14,7 +14,9 @@ let package = Package(
         // reusable on iPhone as is.
         .target(
             name: "XK7DCore",
-            resources: [.copy("Resources/parameters.json")],
+            // The table is compiled in (ParameterTable.swift). No SwiftPM resources: Bundle.module only
+            // finds them on the Mac that built the app.
+            exclude: ["Resources/parameters.json"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // CoreMIDI transport and the simulator's virtual MIDI ports. Works on macOS and iOS.

@@ -1,6 +1,6 @@
 # Hand-off notes
 
-Version 1.0.3 has been tested against the built-in simulator only. It hasn't been
+Version 1.0.4 has been tested against the built-in simulator only. It hasn't been
 connected to a real XK-7D.
 
 ## Architecture
@@ -95,7 +95,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Values the MIDI tables left unclear (fold-back keys, percussion decay, external zone program numbers, sounding point, mic distance, preset key hold time) | Menu pages 85, 100, 103, 109, 121 and 137; unit tests |
 | The built .app | Silent self-test (`XK7D_SELFTEST=path`), run repeatedly; accessibility tree read with `tools/ax-inspect.swift`: every control labelled, slider values read as the display shows them, every command in a menu with a shortcut |
 
-Tests: 96 unit tests and 5 integration tests.
+Tests: 99 unit tests and 5 integration tests.
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -189,6 +189,23 @@ Tests: 96 unit tests and 5 integration tests.
   and which channel to choose in Settings. It doesn't change anything by
   itself.
 
+## 1.0.4: the launch crash
+
+1.0.0 to 1.0.3 crashed at launch on every Mac except the one that built
+them. The table was a SwiftPM resource read through `Bundle.module`, whose
+generated code looks beside the .app (not in Contents/Resources) and then
+in the build machine's `.build` folder, and calls fatalError when both
+fail. On the Studio the `.build` folder was there, so every test and
+Gatekeeper check passed.
+
+Now the table is compiled in (`ParameterTable.swift`, written by the
+generator; a test keeps it equal to `parameters.json`), Package.swift
+declares no resources, and a table that can't be read gives a plain dialog
+instead of a crash. `scripts/check-packaged.sh` (run by `release.sh`
+before and after notarizing) fails if the binary names the build folder,
+and runs the packaged app's self-test with `.build` moved out of reach.
+Run against 1.0.3 it fails, with the same crash Matthew saw.
+
 ## Changes in 1.0.3 (picture pass)
 
 The manual's menu screenshots and drawings were compared with the table.
@@ -216,7 +233,8 @@ might never answer and must still get your changes.
 
 - `XK7D_SELFTEST=/path/to/log`: runs a scripted session against the
   simulator, speaks nothing, writes what it would have said to the log, and
-  quits. It doesn't save the port choice.
+  quits. It doesn't save the port choice. The last line is
+  "SELFTEST DONE 537 settings".
 - `XK7D_SILENT=1`: normal app, no speech.
 - `XK7D_SHOW=simulator:<parameter id>`: opens the simulator window and
   selects a setting.

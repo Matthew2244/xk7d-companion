@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 # The app's name is defined once, in AppIdentity (Sources/XK7DCompanion/AppDelegate.swift).
 NAME=$(sed -n 's/.*static let name = "\(.*\)".*/\1/p' Sources/XK7DCompanion/AppDelegate.swift)
-VERSION=1.0.3
+VERSION=1.0.4
 BUNDLE_ID=io.github.matthew2244.xk7dcompanion
 [ -n "$NAME" ] || { echo "Could not read the app name from AppIdentity"; exit 1; }
 
@@ -19,7 +19,6 @@ APP="build/$NAME.app"
 if [ -d "$APP" ]; then mkdir -p ~/.Trash && mv "$APP" ~/.Trash/"$NAME-old-$(date +%s).app"; fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/XK7DCompanion" "$APP/Contents/MacOS/XK7DCompanion"
-cp -R "$BIN/XK7DCompanion_XK7DCore.bundle" "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -32,7 +31,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>XK7DCompanion</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>4</string>
+  <key>CFBundleVersion</key><string>5</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
