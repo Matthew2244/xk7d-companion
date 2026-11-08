@@ -68,12 +68,12 @@ the other controllers (pp. 176-177) are handled in code, not in the table.
 | Fold-back keys (10 00 00 00 03 / 04) | MIDI table: `00 – 0C (TW#01 – #12)`, 13 values for 12 names, and `00 – 05 (TW#91 – #96)`. | Keys 1C to 2C and 4G to 5C. | **Settled** by the menu (p. 109), which shows these keys; the counts match. |
 | Percussion decay (11 06, 11 07) | `00 – 18 (0 – 24)`. | 1 to 24, then Cont. | **Settled** by the menu (p. 85): "1 – 24, Cont" is exactly 25 values. |
 | External zone program change (3x 04) | `00 – 7F (0 – 127)`. | Shown 1 to 128. | **Settled** by the menu (p. 103). |
-| Preset key hold time (09 02) | `00 – 0A (0.0 – 1.0 sec)`. | 0 to 100 ms in 10 ms steps, as the menu (p. 137) says. | Units conflict; the display will tell. |
+| Preset key hold time (09 02) | `00 – 0A (0.0 – 1.0 sec)`. | 0 to 100 ms in 10 ms steps. | The display is **settled** as ms: the screenshot on p. 137 reads "HOLD TIME [ms] 50", range 0 – 100 ms. What the raw byte means in time (100 ms or 1 s at 0A) still needs the organ. |
 | Expression polarity and curve, damper modes, vibrato type, pipe chiff | MIDI table names differ from the menu's. | Both names where they differ, for example "Norm (H or R)", "1 (B-3)", "Big Box ('57-59)"; chiff "Mid" as on the menu. | Order from the MIDI table; names from both. |
 | Organ type (10 04) | Range `00 – 04` but lists `05: Pipe`. | 00 to 05 including Pipe. | Confident (the organ has six types). |
-| Assign knob functions (19 00-02, 19 06-08) | Range `00 – 17` but the list runs to 1D (EXZ CC). | All 30 listed choices. | The six EXZ CC choices may not exist. |
-| Assign knob CC (19 09-0B) | List skips 1C to 1F; "2E-34: Undefined 85-90" overlaps 2E. | 1C-1F labelled "not listed in the manual"; 2F-34 = CC 85-90. | 1C-1F are probably CC 66-69 but the manual does not say. |
-| Assign buttons (19 03-05) | Table heading says XK-7; the specification says the buttons are XK-7D only. | Included, with a note. | Address confident; which model uses it unclear. |
+| Assign knob functions (19 00-02, 19 06-08) | Range `00 – 17` but the list runs to 1D (EXZ CC). | All 30 listed choices. | The EXZ CC choices **exist**: the screenshot on p. 101 shows a knob set to "LmExZ1 CC" with CC 73. 19 00-02 are the XK-7's knobs and 19 06-08 the XK-7D's (p. 164). |
+| Assign knob CC (19 09-0B) | List skips 1C to 1F; "2E-34: Undefined 85-90" overlaps 2E. | 1C-1F = CC 66-69; 2F-34 = CC 85-90. | **Settled by counting**: the menu (p. 101) gives 76 values for "1 – 119 (including some deletions)", and every other slot is accounted for, so the four missing ones can only be CC 66 to 69. |
+| Assign buttons (19 03-05) | Table heading says XK-7; the specification says the buttons are XK-7D only. | Included, for both models. | **Settled** (p. 164): the XK-7 has no assign buttons, but its OCTAVE buttons can work as them, so the setting applies to both. |
 | Foot switch modes (03 00-04) | Range `00 – 28` but lists 29 and 2A (To Adjust A♯/B). | 00 to 2A. | Confident. |
 | Organ sounding point (09 01) | `00 – 07 (Patch, 1 – 7, Velocity)`: nine names for eight values. | Patch, 1-6, Velocity. | **Settled** by the menu (p. 137). |
 | Pedal sub drawbar level (31 00 00 0g 0k) | `00 – 08 (0 – 9)`. | Shows the raw 0 to 8. | The display may read 1-9 or 0-9. |
@@ -86,7 +86,7 @@ the other controllers (pp. 176-177) are handled in code, not in the table.
 | Preamp expression order (14 05), preamp type (14 03), vibrato type (12 02) | Menu names differ from the MIDI table (four choices vs two for 14 05). | MIDI table names and ranges. | Confident for the address; names may not match the display. |
 | Patch Load banks (4b 00-0A) | Only "b = Bank". | b = 0 to 9 for banks C to A. | Inferred. |
 | Favourite keys (50 ff / 51 ff) | `ff: 00 – 63 (C-C – A-A)`; example E-C♯ = 29h. | ff = bank × 10 + key, keys C, C♯, D ... A. | Confirmed by the manual's example. |
-| Values given only by end points | Vibrato rate (5.78-7.90 Hz), emphasis frequency, EQ frequencies, Leslie rise/fall/brake times, contact delay. | Shows the end points and "step N of M" in between. | Deliberate: the curves are not published, and a guessed number spoken aloud would mislead. |
+| Values given only by end points | Vibrato rate (5.78-7.90 Hz), emphasis frequency, EQ treble frequency, Leslie rise/fall/brake times, contact delay. | Shows the end points and "step N of M" in between. | Deliberate: the curves are not published, and a guessed number spoken aloud would mislead. The EQ bass and middle frequencies are no longer in this list; see "Picture pass". |
 | Expression Source example (p. 185) | SysEx example `... 04 00 01` and the table (Source = NRPN 04 00) agree, but the printed NRPN example reads `Bx 63 04 Bx 62 01 Bx 06 01`, which is the Device parameter. | Follows the table: 63 04 62 00. A unit test records the misprint. | Confident; misprint in the example. |
 | Device ID | Range 0-127, no stated default. | Default 0, and the app adopts whatever ID the organ answers with. | The p. 157 screenshot shows 0. |
 | Dump check digit | "Lower 7 bits of XOR [DATA]". | XOR of the 128 nibblized bytes; incoming packets are accepted if either the nibblized or decoded reading matches, and the app records which. | Ambiguous until a real dump is captured. |
@@ -100,6 +100,77 @@ centre, and every choice label and its order. No errors were found. The only
 new note is the stop assign label above. Pages 176 and 177 (drawbar
 controllers and levels, program change banks, other controllers, NRPN and
 identity) also matched the code.
+
+## Picture pass (1.0.3)
+
+Every menu screenshot, panel drawing and diagram from p. 10 to p. 175 was
+compared with the table. What the pictures settled, and what changed:
+
+| Setting | What the picture shows | Change |
+|---|---|---|
+| EQ bass frequency, patch (16 00) and master (01 03) | p. 99 and p. 127 show 104 Hz. 20 Hz plus 12 Hz a step gives 104 at step 7 and lands exactly on 308 Hz at step 24. | Every value is named, 20 Hz to 308 Hz in 12 Hz steps. |
+| Patch EQ middle frequency (16 01) | p. 99 shows 1.2k. 250 Hz plus 190 Hz a step gives 1.2 kHz at step 5 and lands exactly on 3.1 kHz at step 15. | Every value is named. |
+| Master EQ middle frequency (01 04) | p. 127 shows 1.25k. Sixteen values from 125 Hz to 4 kHz is exactly the standard third-octave series. | Every value is named: 125, 160, 200 ... 3.15k, 4k. |
+| Preamp output level (14 02) | Menu p. 92: -64 to ±0 to +63; the screenshot shows 0. | Shown -64 to +63, raw 64 = 0. |
+| Custom contact, Pedal (21 03 ..) | Menu p. 117: "1 – 6 (Upper / Lower / Percussion), 1 – 3 (Pedal)". | Pedal offers contacts 1 to 3 only. |
+| Assign knob CC gap, assign buttons, EXZ CC choices | pp. 101 and 164. | See the table above. |
+| Octave Down / Up / Lower button modes (06 01-03) | p. 134: "MODE (XK-7 ONLY)". | Marked XK-7 only. |
+| Patch Load "Drawbar" and "Pedal to Lower" (4b 01, 4b 0A) | p. 138: these are DB PARAM (organ type, contact, sustain), not the registration, and LINK TO PED (a Lower patch also selects its Pedal patch). | Names and help say so. Assign covers knobs and buttons. |
+| MIDI In Mode (0C 00) | The p. 155 screenshot reads "Sequence". | Label changed from "Sequencer". |
+| Vibrato mode (12 01) | The panel drawing on p. 10 has the same clockwise order as p. 58. | No change; still needs the organ. |
+| Custom contact count | p. 162 shows user contacts U1 to U3 and p. 174 factory contacts F1 to F3. | Confirms the MIDI table's 6 values over p. 84's "U1 – U4, F1 – F4". |
+| Preset key hold time, tone wheel brake range, mic distance, Leslie speed ranges, external zone ranges, display settings, damper, velocity offset, pipe stop list | Screenshots on pp. 100, 103-104, 119-121, 134, 136, 137 and 174 agree with the table. | None. |
+
+MIDI templates (p. 175): all six set Individual Parameters to NRPN, so loading
+one undoes Set Up Organ; the help says to run it again. The three External
+Zone templates also turn Tx Upper, Lower and Pedal off.
+
+### What the pictures could not settle
+
+- **Custom set order, User or Factory first.** No screenshot shows the value
+  stepping. The Leslie cabinet is printed both ways: "U1 – U10, F1 – F10" on
+  p. 119 and "F1 – F10, U1 – U10" on p. 87. Tone wheel, contact, pipe and
+  sub drawbar menus print F first (pp. 109, 116, 118, 122) or U first (p. 83).
+  The app still follows the MIDI tables (U first).
+- **Leslie mic width.** p. 121 shows a horn at "Side" and a drum at 7, range
+  "0 – 40 cm, Side". "Side" is real, probably the top of the range, but how
+  raw 0-100 maps onto 0-40 cm and Side isn't given. The app still shows the
+  raw number.
+- **Custom pipe Pedal part, 2 or 3.** p. 122 shows three tabs (Upper, Lower,
+  Pedal) and no percussion, which fits part 2, but nothing states it. The app
+  still uses 3.
+- **Curves for the "step N of M" values.** Real points exist (p. 120: Leslie
+  rise and fall 2.4 s horn, 6.5 s drum, brake 4.0 s; p. 116: contact delay
+  0.4 ms; p. 86: vibrato rate 6.83 Hz, emphasis 5.12 kHz; pp. 99 and 127:
+  treble 4 kHz). The rise time point doesn't fit a straight line and treble
+  and emphasis fit neither a straight line nor a simple log curve. Vibrato rate
+  6.83 fits a straight line at step 63, but one point isn't enough, so it
+  stays "step N of M".
+- **Effect 1 and 2 parameter names.** The menus (pp. 88-96) name every
+  setting of every effect, but nothing maps them onto Param 1 to 8, and they
+  don't fit the printed ranges: Param 1 and 2 take 0 to 3, yet Tremolo's wave
+  has 7 choices and Phaser's stage 5, and Chorus has 7 continuous settings for
+  6 slots. Effect 2 type "Delay" has no menu page at all. The app keeps
+  "Effect 1 parameter 1" and so on. In screen order:
+  - Tremolo: Wave (7), Trigger (Free, Single), Rate, Depth.
+  - Wah-Wah: Source (Manual, Exp, LFO, and EG or Input; the page says both), Sens, Reso, Freq, LFO Wave (6), LFO Rate, EG Attack, EG Decay.
+  - Ring Mod: Source (4 or 5), Sens, Freq, Mix, LFO Wave (6), LFO Rate, EG Attack, EG Decay.
+  - Compressor: Ratio, Threshold, Gain, Attack, Release, Delay Time.
+  - Auto Pan: Wave (7), Rate, Depth.
+  - Phaser: Rate, Depth, Reso, Mix, Manual, Stage (2 to 10).
+  - Flanger: Rate, Depth, Reso, Mix, Delay, HPF.
+  - Chorus: Rate, Depth, Reso, Mix, Pre Delay, Delay, HPF, Phase (2, 3).
+- **Value order where the menu and MIDI table disagree:** foot switch Tri and
+  Mom (menu p. 130 lists Tri first), whether ProChord is one foot switch value
+  or two (Closed, Open), Pedal to Lower mode (menu p. 102: Lowest, Poly,
+  Chord), delay and reverb structure (menu p. 97: Delay, Reverb, Delay +
+  Reverb), preamp expression order (four menu choices, two in the table),
+  Leslie mic type order. The app follows the MIDI table in each.
+- **Smaller ones:** the Pedal contact's key range (p. 116 says two octaves;
+  the app offers all 61 keys), leakage Pedal footages (8 on p. 112, 16 on
+  p. 113), the tone wheel level minimums (-99.6 or -60 dB on the menus,
+  -100 in the table), and the Device ID factory default (the p. 157
+  screenshot shows 0, which isn't a statement).
 
 ## Still to confirm on a real organ
 

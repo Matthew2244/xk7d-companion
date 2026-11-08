@@ -1,6 +1,6 @@
 # Hand-off notes
 
-Version 1.0.2 has been tested against the built-in simulator only. It hasn't been
+Version 1.0.3 has been tested against the built-in simulator only. It hasn't been
 connected to a real XK-7D.
 
 ## Architecture
@@ -95,7 +95,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Values the MIDI tables left unclear (fold-back keys, percussion decay, external zone program numbers, sounding point, mic distance, preset key hold time) | Menu pages 85, 100, 103, 109, 121 and 137; unit tests |
 | The built .app | Silent self-test (`XK7D_SELFTEST=path`), run repeatedly; accessibility tree read with `tools/ax-inspect.swift`: every control labelled, slider values read as the display shows them, every command in a menu with a shortcut |
 
-Tests: 87 unit tests and 5 integration tests.
+Tests: 96 unit tests and 5 integration tests.
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -188,6 +188,15 @@ Tests: 87 unit tests and 5 integration tests.
   channel, the app says once per connection that the channels don't match
   and which channel to choose in Settings. It doesn't change anything by
   itself.
+
+## Changes in 1.0.3 (picture pass)
+
+The manual's menu screenshots and drawings were compared with the table.
+They settled the EQ bass and middle frequencies, the preamp output level,
+the Pedal contact count, the assign knob CC gap, which model the assign and
+octave buttons apply to, and what two Patch Load items mean. The full list,
+and what the pictures couldn't settle, is in docs/PARAMETER-REVIEW.md under
+"Picture pass". Tests: `Tests/XK7DCoreTests/PicturePassTests.swift`.
 
 Port choice lives in `XK7DCore/PortPolicy.swift` so it can be tested without
 CoreMIDI; `Tests/XK7DCoreTests/ReviewFixTests.swift` covers it.

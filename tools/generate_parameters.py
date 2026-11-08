@@ -58,6 +58,13 @@ def onoff():
     return {"type": "enum", "options": [[0, "Off"], [1, "On"]]}
 
 
+def hz(f):
+    """A frequency as the app shows it: "104 Hz", "1.2 kHz", "1.25 kHz"."""
+    if f < 1000:
+        return "%d Hz" % f
+    return ("%.2f" % (f / 1000)).rstrip("0").rstrip(".") + " kHz"
+
+
 def enum(labels, start=0):
     return {"type": "enum", "options": [[start + i, l] for i, l in enumerate(labels)]}
 
@@ -152,7 +159,9 @@ def knob_cc():
     rows += [(0xB + i, 16 + i, "VCont %d" % (i + 1)) for i in range(4)]
     rows += [(0xF + i, 20 + i, "Undefined") for i in range(12)]
     rows += [(0x1B, 65, "Portamento")]
-    rows += [(0x1C + i, None, None) for i in range(4)]  # not listed in the manual
+    # Not listed, but the menu's range (p. 101) is 76 values, CC 1 to 119 with some left out, and every
+    # other slot is accounted for, so these four can only be CC 66 to 69.
+    rows += [(0x1C + i, 66 + i, "(not named in the manual)") for i in range(4)]
     rows += [(0x20, 70, "Sound Variation"), (0x21, 71, "Resonance"), (0x22, 72, "Release Time"),
              (0x23, 73, "Attack Time"), (0x24, 74, "Cutoff Freq")]
     rows += [(0x25 + i, 75 + i, "Undefined") for i in range(9)]
@@ -258,6 +267,18 @@ SPECIAL = {
     "hold_ms": lambda: number(0, 0x0A, 0, 0, 10, 0, "ms"),
     "formant_phase": lambda: number(0, 359, 0, 0, 1, 0, "degrees"),  # 02 67 = 359
     "contact_leaf": lambda: number(0, 5, 0, 1),
+    # Pedal has three contacts, not six: menu p. 117, "1 - 6 (Upper / Lower / Percussion), 1 - 3 (Pedal)".
+    "contact_leaf_pedal": lambda: number(0, 2, 0, 1),
+    # EQ frequencies the screenshots settle (pp. 99, 127). Bass: 20 + 12 Hz a step reaches 308 exactly at
+    # step 24 and gives the 104 shown. Patch mid: 250 + 190 Hz a step reaches 3.1k exactly at step 15 and
+    # gives the 1.2k shown. Master mid: 16 steps from 125 Hz to 4 kHz is the standard third-octave series;
+    # the 1.25k shown is on it.
+    "eq_bass": lambda: enum([hz(20 + 12 * i) for i in range(25)]),
+    "eq_mid_patch": lambda: enum([hz(250 + 190 * i) for i in range(16)]),
+    "eq_mid_master": lambda: enum([hz(f) for f in (125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
+                                                   2000, 2500, 3150, 4000)]),
+    # Preamp output level: menu p. 92 "-64 - ±0 - +63", 128 values on the raw 00-7F.
+    "minus64": lambda: number(0, 0x7F, 0x40, 0, 1, 0, "", True),
     "pipe_footage": lambda: enum(["32'", "16'", "5 1/3'", "8'", "4'", "2 2/3'", "2'", "1 3/5'", "1 1/3'", "1'"]),
     "cent50": lambda: number(0x2000 - 50, 0x2000 + 50, 0x2000, 0, 1, 0, "cents", True),
     "cutoff": lambda: number(0x2000 - 127, 0x2000, 0x2000, 0, 1, 0, "", True),
@@ -401,7 +422,8 @@ row(CU, "ProChord Mode", "ProChord mode", "18 06", "00 00 00 18 06", "01", "enum
 row("Control Lower", "Damper Enable Lower", "Damper on Lower", "1D 01", "00 00 00 1D 01", "01", "onoff", 178)
 row("Control Pedal", "Damper Enable Pedal", "Damper on Pedal", "20 00", "00 00 00 20 00", "01", "onoff", 178)
 KNOB_NOTE = ("The manual heads this range 00-17 but its list goes on to 1D (the EXZ CC choices). "
-             "All listed choices are offered.")
+             "All listed choices are offered. The screenshot on p. 101 shows an external zone CC choice in use, "
+             "so they exist.")
 CA7 = "Control Assignable (XK-7)"
 for i in range(3):
     row(CA7, "Knob %d (XK-7)" % (i + 1) if i == 0 else "Knob %d" % (i + 1), "XK-7 assign knob %d" % (i + 1),
@@ -410,8 +432,8 @@ for i in range(3):
 for i in range(3):
     row(CA7, "Button %d" % (i + 1), "Assign button %d" % (i + 1), "19 %02X" % (3 + i), "00 00 00 19 %02X" % (3 + i),
         "01", "buttons", 178, "What ASSIGN button %d does." % (i + 1),
-        notes="The manual heads this table 'XK-7', but the specification (p. 188) says the assign buttons "
-              "are on the XK-7D only.")
+        notes="On the XK-7D these are the ASSIGN buttons. The XK-7 has none, but its OCTAVE buttons can be set "
+              "to work as assign buttons (p. 164), so this setting applies to both models.")
 CA = "Control Assignable (XK-7D and XK-7D)"
 for i in range(3):
     row(CA, "Knob %d" % (i + 1), "Assign knob %d function" % (i + 1), "19 %02X" % (6 + i), "00 00 00 19 %02X" % (6 + i),
@@ -519,7 +541,8 @@ for i in range(8):
 PA = "Pre-Amplifier"
 row(PA, "On", "Preamp on", "14 00", "00 00 00 14 00", "01", "onoff", 180)
 row(PA, "Drive Level", "Preamp drive", "14 01", "00 00 00 14 01", "01", "int:00-7F", 180)
-row(PA, "Output Level", "Preamp output level", "14 02", "00 00 00 14 02", "01", "int:00-7F", 180)
+row(PA, "Output Level", "Preamp output level", "14 02", "00 00 00 14 02", "01", "minus64", 180,
+    notes="The MIDI table gives 0-127; the menu (p. 92) shows -64 to +63, so raw 64 is 0.")
 row(PA, "Type", "Preamp type", "14 03", "00 00 00 14 03", "01", "enum:Tube Amp|Stomp Box|Clip|EP Amp", 180)
 row(PA, "Presence", "Preamp presence", "14 04", "00 00 00 14 04", "01", "int:00-7F", 180)
 row(PA, "Exp. Control", "Preamp expression order", "14 05", "00 00 00 14 05", "01", "enum:Exp-PreAmp|PreAmp-Exp", 180,
@@ -535,8 +558,10 @@ for i in range(8):
         "01", "int:00-03" if i < 2 else "int:00-7F", 180,
         "What this does depends on the effect type (manual p. 94 to 96).")
 EQ = "Equalizer"
-row(EQ, "Bass Freq", "Patch EQ bass frequency", "16 00", "00 00 00 16 00", "01", "steps:00-18:20 Hz:308 Hz", 181)
-row(EQ, "Mid Freq", "Patch EQ middle frequency", "16 01", "00 00 00 16 01", "01", "steps:00-0F:250 Hz:3.1 kHz", 181)
+row(EQ, "Bass Freq", "Patch EQ bass frequency", "16 00", "00 00 00 16 00", "01", "eq_bass", 181,
+    notes="The manual gives only 20 Hz to 308 Hz. The values in between are worked out from the screenshot on p. 99 (104 Hz).")
+row(EQ, "Mid Freq", "Patch EQ middle frequency", "16 01", "00 00 00 16 01", "01", "eq_mid_patch", 181,
+    notes="The manual gives only 250 Hz to 3.1 kHz. The values in between are worked out from the screenshot on p. 99 (1.2 kHz).")
 row(EQ, "Treble Freq", "Patch EQ treble frequency", "16 02", "00 00 00 16 02", "01", "steps:00-13:3.0 kHz:8.0 kHz", 181)
 row(EQ, "Bass Gain", "Patch EQ bass", "16 03", "00 00 00 16 03", "01", "gain9", 181)
 row(EQ, "Mid Gain", "Patch EQ middle", "16 04", "00 00 00 16 04", "01", "gain9", 181)
@@ -598,8 +623,10 @@ CONTACT_PARTS = [(0, "Upper", "manual"), (1, "Lower", "manual"), (2, "Percussion
 for b2, mname, nm, spec in (("00", "Leaf Assign", "contact leaf", "contact_leaf"),
                             ("01", "Delay Time", "contact delay", "steps:00-7F:0.0 ms:725.6 ms")):
     for p, pname, fk in CONTACT_PARTS:
-        row(CT, mname, "%s %s" % (pname, nm), "--", "21 0%d %s 0g nn" % (p, b2), "01", spec, 182, manual_addr="21 0p %s 0g nn" % b2,
-            indices=[dim("Footage", 3, fk), dim("Key", 4, "keys61")])
+        pspec = "contact_leaf_pedal" if (spec == "contact_leaf" and pname == "Pedal") else spec
+        extra = {"notes": "Pedal has three contacts (menu p. 117)."} if pspec != spec else {}
+        row(CT, mname, "%s %s" % (pname, nm), "--", "21 0%d %s 0g nn" % (p, b2), "01", pspec, 182, manual_addr="21 0p %s 0g nn" % b2,
+            indices=[dim("Footage", 3, fk), dim("Key", 4, "keys61")], **extra)
 
 # --- CUSTOM PEDAL REG, p.182 ------------------------------------------------------
 PR = "Temporary Pedal"
@@ -673,8 +700,10 @@ ME = "Master Equalizer"
 row(ME, "Bass Gain", "Master EQ bass", "01 00", "00 00 00 01 00", "01", "gain9", 184)
 row(ME, "Mid Gain", "Master EQ middle", "01 01", "00 00 00 01 01", "01", "gain9", 184)
 row(ME, "Treble Gain", "Master EQ treble", "01 02", "00 00 00 01 02", "01", "gain9", 184)
-row(ME, "Bass Freq", "Master EQ bass frequency", "01 03", "00 00 00 01 03", "01", "steps:00-18:20 Hz:308 Hz", 184)
-row(ME, "Mid Freq", "Master EQ middle frequency", "01 04", "00 00 00 01 04", "01", "steps:00-0F:125 Hz:4 kHz", 184)
+row(ME, "Bass Freq", "Master EQ bass frequency", "01 03", "00 00 00 01 03", "01", "eq_bass", 184,
+    notes="The manual gives only 20 Hz to 308 Hz. The values in between are worked out from the screenshot on p. 127 (104 Hz).")
+row(ME, "Mid Freq", "Master EQ middle frequency", "01 04", "00 00 00 01 04", "01", "eq_mid_master", 184,
+    notes="The manual gives only 125 Hz to 4 kHz. Sixteen steps between them is the standard third-octave series; the screenshot on p. 127 shows 1.25 kHz.")
 row(ME, "Treble Freq", "Master EQ treble frequency", "01 05", "00 00 00 01 05", "01", "steps:00-13:3.0 kHz:8.0 kHz", 184)
 row(ME, "Mid Q", "Master EQ middle width", "01 06", "00 00 00 01 06", "01", "int:00-3F", 184)
 AU = "Audio"
@@ -703,9 +732,12 @@ for i, part in enumerate(["Upper", "Lower", "Pedal"]):
     row("Damper", part, "Damper mode, " + part, "05 %02X" % i, "00 00 00 05 %02X" % i, "01", "enum:Patch|Off (disabled)|On (enabled)", 184)
 OT = "Octave / Transpose buttons"
 row(OT, "Mode Oct/Xposepose", "Octave and transpose apply", "06 00", "00 00 00 06 00", "01", "enum:Every|Next", 184)
-row(OT, "Mode Octave Down", "Octave Down button", "06 01", "00 00 00 06 01", "01", "enum:Octave|Assign", 184)
-row(OT, "Mode Octave Up", "Octave Up button", "06 02", "00 00 00 06 02", "01", "enum:Octave|Assign", 184)
-row(OT, "Mode Octave Lower", "Octave Lower button", "06 03", "00 00 00 06 03", "01", "enum:Octave|Assign", 184)
+row(OT, "Mode Octave Down", "Octave Down button", "06 01", "00 00 00 06 01", "01", "enum:Octave|Assign", 184,
+    "XK-7 only (p. 134).", xk7only=True)
+row(OT, "Mode Octave Up", "Octave Up button", "06 02", "00 00 00 06 02", "01", "enum:Octave|Assign", 184,
+    "XK-7 only (p. 134).", xk7only=True)
+row(OT, "Mode Octave Lower", "Octave Lower button", "06 03", "00 00 00 06 03", "01", "enum:Octave|Assign", 184,
+    "XK-7 only (p. 134).", xk7only=True)
 KD = "Knobs / Drawbars"
 row(KD, "Control Mode", "Knob and drawbar control mode", "07 00", "00 00 00 07 00", "01", "enum:A#/B|Always A#", 184)
 row(KD, "Action", "Knob and drawbar action", "07 01", "00 00 00 07 01", "01", "enum:Momentary|Across", 184)
@@ -727,7 +759,7 @@ row(KB, "Preset Key Hold Time", "Preset key hold time", "09 02", "00 00 00 09 02
     notes="The MIDI table says 00-0A (0.0 - 1.0 sec); the menu says 0 to 100 ms (p. 137). This app follows the menu, "
           "in 10 ms steps. The organ's display will settle which is right.")
 MC = "MIDI Common"
-row(MC, "MIDI In Mode", "MIDI in mode", "--", "00 00 00 0C 00", "01", "enum:Upper|Lower|Sequencer", 184)
+row(MC, "MIDI In Mode", "MIDI in mode", "--", "00 00 00 0C 00", "01", "enum:Upper|Lower|Sequence", 184)
 row(MC, "Rx VMC Depth", "Virtual multi-contact depth", "--", "00 00 00 0C 01", "01", "int:00-7F", 184)
 row(MC, "Local Control", "Local control", "--", "00 00 00 0C 02", "01", "onoff", 184)
 row(MC, "TRx Individual Parameters", "Individual parameters", "--", "00 00 00 0C 03", "01", "enum:Off|NRPN|SysEx", 184,
@@ -745,10 +777,12 @@ for i, mname in enumerate(["Tx Upper", "Tx Lower", "Tx Pedal", "Rx Upper", "Rx L
         "--", "00 00 00 0D %02X" % i, "01", "chan16off", 185)
 row("Patch Load", "Action", "Patch load", "0A 00", "00 00 00 0A 00", "01", "enum:Instant|Entered", 185,
     "Instant loads a patch as soon as you turn VALUE; Entered waits for ENTER.")
-PL = [("Registration", "drawbar registration"), ("Drawbar", "drawbar settings"), ("Percussion", "percussion"),
+# Names as the menu page (p. 138) explains them: "Drawbar" is DB PARAM, the organ section's settings
+# (organ type, contact, sustain), not the registration; "Pedal to Lower" is LINK TO PED.
+PL = [("Registration", "drawbar registration"), ("Drawbar", "organ settings (DB Param)"), ("Percussion", "percussion"),
       ("Animation", "vibrato and Leslie"), ("Effect / EQ", "effects and EQ"), ("Delay / Reverb", "delay and reverb"),
-      ("Control", "controllers"), ("Assign", "assign knobs"), ("Internal Zones", "internal zones"),
-      ("External Zones", "external zones"), ("Pedal to Lower", "pedal to lower")]
+      ("Control", "controllers"), ("Assign", "assign knobs and buttons"), ("Internal Zones", "internal zones"),
+      ("External Zones", "external zones"), ("Pedal to Lower", "linked Pedal patch (Link to Ped)")]
 for i, (mname, short) in enumerate(PL):
     row("Patch Load", mname, "loads " + short, "4b %02X" % i, "00 00 00 4b %02X" % i, "01", "onoff", 185,
         "Whether Preset Keys in this bank recall the " + short + ".",

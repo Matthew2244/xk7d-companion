@@ -53,7 +53,8 @@ It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
    number (custom Leslie cabinets, custom tone wheels and patch names, among
    others) are never sent by the organ. To keep these settings after the
    organ is turned off, record the System settings on the organ (manual page
-   142).
+   142). Loading one of the organ's MIDI templates puts Individual
+   Parameters back to NRPN, so run Set Up Organ again after that.
 3. Play. Changes are spoken.
 
 To change a setting from the Mac, press Command F and type part of its name,
@@ -107,9 +108,11 @@ like the organ's panel. It also logs what it received.
   can't turn it into values.
 - Some values are shown only by their end points, such as "step 12 of 36".
   The manual doesn't give the curve in between. This covers Leslie rise, fall
-  and brake times, vibrato rate, EQ frequencies and contact delay.
+  and brake times, vibrato rate, the EQ treble frequency, the vibrato
+  emphasis frequency and contact delay.
 - Effect 1 and Effect 2 parameters are numbered 1 to 8 rather than named for
-  each effect type.
+  each effect type. The menu pages name each effect's settings, but the
+  manual doesn't say which name goes with which number.
 - The manual gives no MIDI for some actions, so the app can't record patches,
   use a USB stick, reset the organ or update firmware.
 - It needs macOS 14 or later. So far it has only been run on macOS 26.
