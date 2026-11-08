@@ -1,6 +1,6 @@
 # Hand-off notes
 
-Version 1.0.1 has been tested against the built-in simulator only. It hasn't been
+Version 1.0.2 has been tested against the built-in simulator only. It hasn't been
 connected to a real XK-7D.
 
 ## Architecture
@@ -95,7 +95,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Values the MIDI tables left unclear (fold-back keys, percussion decay, external zone program numbers, sounding point, mic distance, preset key hold time) | Menu pages 85, 100, 103, 109, 121 and 137; unit tests |
 | The built .app | Silent self-test (`XK7D_SELFTEST=path`), run repeatedly; accessibility tree read with `tools/ax-inspect.swift`: every control labelled, slider values read as the display shows them, every command in a menu with a shortcut |
 
-Tests: 85 unit tests and 5 integration tests.
+Tests: 87 unit tests and 5 integration tests.
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -176,6 +176,18 @@ Tests: 85 unit tests and 5 integration tests.
   Device ID. Before, it was built once and could write a stale Device ID back
   over the one learned from the organ.
 - Vibrato mode order, see above.
+
+## Changes in 1.0.2
+
+- Command W (or the close button) hides the main window instead of quitting,
+  and says "Window hidden. Still listening." Command 1, the Dock icon or
+  opening the app again brings it back. Command Q quits.
+- In Set Up Organ, the box that changes the organ's Upper send channel is off
+  by default and says what it changes.
+- If NRPN or drawbar messages arrive on a channel other than the app's Upper
+  channel, the app says once per connection that the channels don't match
+  and which channel to choose in Settings. It doesn't change anything by
+  itself.
 
 Port choice lives in `XK7DCore/PortPolicy.swift` so it can be tested without
 CoreMIDI; `Tests/XK7DCoreTests/ReviewFixTests.swift` covers it.

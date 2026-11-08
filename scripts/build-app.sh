@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 # The app's name is defined once, in AppIdentity (Sources/XK7DCompanion/AppDelegate.swift).
 NAME=$(sed -n 's/.*static let name = "\(.*\)".*/\1/p' Sources/XK7DCompanion/AppDelegate.swift)
-VERSION=1.0.1
+VERSION=1.0.2
 BUNDLE_ID=io.github.matthew2244.xk7dcompanion
 [ -n "$NAME" ] || { echo "Could not read the app name from AppIdentity"; exit 1; }
 
@@ -32,7 +32,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>XK7DCompanion</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>2</string>
+  <key>CFBundleVersion</key><string>3</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>

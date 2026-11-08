@@ -368,7 +368,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSOutlin
         return t
     }
 
-    func windowWillClose(_ notification: Notification) {
-        NSApp.terminate(nil)
+    /// Closing hides the window instead of quitting, so a stray Command W on stage doesn't stop
+    /// the announcements.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        model.announcer.announce("Window hidden. Still listening.", force: true)
+        return false
     }
 }

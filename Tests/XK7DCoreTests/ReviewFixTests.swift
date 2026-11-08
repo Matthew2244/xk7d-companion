@@ -119,3 +119,29 @@ final class VibratoOrderTests: XCTestCase {
         XCTAssertEqual(s.parameter.allRawValues.map { s.parameter.display($0) }, ["V-1", "C-1", "V-2", "C-2", "V-3", "C-3"])
     }
 }
+
+final class ChannelMismatchTests: XCTestCase {
+    func testControlsOnTheWrongChannelAreReportedOncePerConnection() {
+        let session = OrganSession()
+        var reported: [Int] = []
+        session.onChannelMismatch = { reported.append($0) }
+        // Organ sends NRPN on channel 4 (index 3); the app listens on channel 1.
+        session.receive([0xB3, 0x63, 0x10, 0x62, 0x04, 0x06, 0x01])
+        session.receive([0xB3, 0x63, 0x11, 0x62, 0x00, 0x06, 0x01])
+        session.receive([0xB3, 0x0E, 0x40])                       // a drawbar, same channel
+        XCTAssertEqual(reported, [3])
+        session.resetConnection()
+        session.receive([0xB3, 0x0E, 0x50])
+        XCTAssertEqual(reported, [3, 3], "said again after reconnecting")
+    }
+
+    func testRightChannelAndOtherTrafficSayNothing() {
+        let session = OrganSession()
+        var reported: [Int] = []
+        session.onChannelMismatch = { reported.append($0) }
+        session.receive([0xB0, 0x63, 0x10, 0x62, 0x04, 0x06, 0x01])   // Upper channel: fine
+        session.receive([0xB1, 0x07, 0x64, 0xB2, 0x0B, 0x40])         // volume, expression on Lower and Pedal
+        session.receive([0x91, 0x3C, 0x40, 0xC1, 0x05])               // notes and program change
+        XCTAssertEqual(reported, [])
+    }
+}

@@ -36,7 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Closing the main window hides it; the app keeps listening. Command Q quits.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Clicking the Dock icon, or opening the app again, brings the main window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !(mainWindow.window?.isVisible ?? false) { mainWindow.showWindow(nil) }
+        return true
+    }
 
     // MARK: Menus (every command reachable from the keyboard)
 
@@ -142,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             alert.messageText = "Read from Organ"
             alert.informativeText = summary
             alert.addButton(withTitle: "OK")
-            if let w = self.mainWindow.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+            if let w = self.mainWindow.window, w.isVisible { alert.beginSheetModal(for: w) } else { alert.runModal() }
         }
     }
 
@@ -151,13 +158,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             model.announcer.announce(model.notConnectedMessage, force: true)
             return
         }
+        showMain(nil)
         let steps = model.setupSteps()
         let alert = NSAlert()
         alert.messageText = "Set up the organ to report changes to this app"
         alert.informativeText = "Tick what to change, then choose Send to Organ. Nothing is sent until you do. These are System settings: to keep them after the organ is turned off, record the System settings on the organ (manual page 142)."
         let boxes = steps.map { s -> NSButton in
             let b = NSButton(checkboxWithTitle: s.title, target: nil, action: nil)
-            b.state = .on
+            b.state = s.onByDefault ? .on : .off
             b.setAccessibilityLabel(s.title)
             return b
         }
@@ -185,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func saveSnapshot(_ sender: Any?) {
         guard let snap = model.snapshot else { return }
+        showMain(nil)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "syx") ?? .data]
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HHmm"
@@ -242,6 +251,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx.
 
         If the organ is unplugged or turned off, the app says so, and connects again by itself when the organ comes back.
+
+        Command W hides this window. The app keeps listening and speaking organ changes. Command 1 or the Dock icon brings it back. Command Q quits.
         """
         alert.runModal()
     }

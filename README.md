@@ -43,8 +43,12 @@ It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
    organ is turned off, the app says "Organ disconnected", and connects again
    when it's back.
 2. Choose **Organ > Set Up Organ for This App** (Command Shift U). It offers
-   four changes to the organ's MIDI settings, each with a checkbox. Nothing is
-   sent until you choose Send to Organ. The one that matters most is
+   four changes to the organ's MIDI settings, each with a checkbox. Three are
+   ticked. The fourth changes the organ's Upper send channel and is off, since
+   it can affect other MIDI gear. If the organ sends on a different channel
+   from the app, the app tells you, and it's usually easier to change Upper
+   channel in the app's Settings. Nothing is sent until you choose Send to
+   Organ. The one that matters most is
    Individual Parameters set to SysEx. Without it, settings that have no NRPN
    number (custom Leslie cabinets, custom tone wheels and patch names, among
    others) are never sent by the organ. To keep these settings after the
@@ -69,8 +73,13 @@ value as the organ's display shows it.
 | Command Shift M | Mute or unmute announcements |
 | Command Shift L | Repeat the last announcement |
 | Command 1, Command 2 | Main window, simulator window |
+| Command W | Hide the main window. The app keeps listening |
 | Command S | Save the last organ snapshot as a .syx file |
 | Command comma | Settings |
+
+Hiding the main window doesn't stop anything. The app says "Window hidden.
+Still listening." Command 1 or the Dock icon brings the window back, and
+Command Q quits.
 
 Everything the app has spoken is listed under Recent announcements, at the
 bottom of the main window.

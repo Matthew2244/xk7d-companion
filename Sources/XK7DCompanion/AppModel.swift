@@ -45,6 +45,13 @@ final class AppModel {
         }
         session.onAnnouncement = { [weak self] in self?.announcer.announce($0) }
         session.onEvent = { [weak self] event, _ in self?.eventArrived(event) }
+        session.onChannelMismatch = { [weak self] channel in
+            guard let self else { return }
+            let mine = self.session.addressing.upperChannel + 1
+            self.statusText = "The organ is sending its controls on channel \(channel + 1), but this app listens for them on channel \(mine). Set Upper channel to \(channel + 1) in Settings (Command comma)."
+            self.announcer.announce("Channels don't match. The organ sends on channel \(channel + 1), the app listens on \(mine). Change Upper channel in Settings.", force: true)
+            NotificationCenter.default.post(name: .connectionChanged, object: nil)
+        }
         session.onDeviceIDLearned = { id in
             UserDefaults.standard.set(Int(id), forKey: "deviceID")
             NotificationCenter.default.post(name: .connectionChanged, object: nil)
@@ -270,6 +277,7 @@ final class AppModel {
         let title: String
         let setting: Setting
         let raw: Int
+        var onByDefault = true
     }
 
     func setupSteps() -> [SetupStep] {
@@ -281,8 +289,8 @@ final class AppModel {
                       setting: s(0x0C, 0x04), raw: 1),
             SetupStep(title: "Send and receive drawbar moves (Drawbar Registration: On), so drawbars are announced.",
                       setting: s(0x0C, 0x05), raw: 1),
-            SetupStep(title: "Send on the Upper channel \(session.addressing.upperChannel + 1) (Tx Upper). The organ sends drawbars and NRPN on this channel.",
-                      setting: s(0x0D, 0x00), raw: session.addressing.upperChannel),
+            SetupStep(title: "Change the organ's Upper send channel to \(session.addressing.upperChannel + 1), to match this app (Tx Upper). Only needed if the app says the channels don't match. It also moves the organ's Upper notes, so other MIDI gear listening to the organ may need changing too. Usually it's easier to change Upper channel in this app's Settings instead.",
+                      setting: s(0x0D, 0x00), raw: session.addressing.upperChannel, onByDefault: false),
         ]
     }
 

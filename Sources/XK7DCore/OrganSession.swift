@@ -63,6 +63,11 @@ public final class OrganSession {
     public var onAnnouncement: ((String) -> Void)?
     /// Called when the device ID was learned from the organ.
     public var onDeviceIDLearned: ((UInt8) -> Void)?
+    /// Called once per connection when the organ's controls (NRPN or drawbars) arrive on a channel
+    /// other than the Upper channel the app listens on. The argument is that channel, 0-based.
+    public var onChannelMismatch: ((Int) -> Void)?
+    private var reportedMismatch: Set<Int> = []
+
     /// Called for each dump packet while a dump is being received.
     public var onDumpProgress: ((DumpSnapshot) -> Void)?
 
@@ -117,6 +122,7 @@ public final class OrganSession {
         paced.removeAll()
         identityAskedAt = nil
         identityAttempts = 0
+        reportedMismatch.removeAll()
     }
 
     public func forgetAllValues() {
@@ -261,7 +267,15 @@ public final class OrganSession {
 
     private func handleCC(channel: Int, controller: Int, value: Int) {
         if controller == 0 { bankMSB[channel] = value; return }
-        guard channel == addressing.upperChannel else { return }
+        guard channel == addressing.upperChannel else {
+            // The organ sends NRPN and drawbars only on its Upper channel (p. 156), so seeing them
+            // elsewhere means the app's Upper channel doesn't match the organ's.
+            if controller == 99 || DrawbarCC.drawbar(forController: controller) != nil,
+               reportedMismatch.insert(channel).inserted {
+                onChannelMismatch?(channel)
+            }
+            return
+        }
         if let v = nrpn.handle(controller: controller, value: value) {
             if let s = database.setting(nrpnMSB: v.msb, lsb: v.lsb) {
                 received(s, raw: v.raw)
