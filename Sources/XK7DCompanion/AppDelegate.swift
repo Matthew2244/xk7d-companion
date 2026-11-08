@@ -33,8 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         mainWindow = MainWindowController(model: model)
         if let log = ProcessInfo.processInfo.environment["XK7D_SELFTEST"] {
-            // Silent self-test: no speech, no focus stealing; results go to the log file.
-            mainWindow.showWindow(nil)
+            // Silent self-test: no speech, no window, no Dock icon; results go to the log file.
             model.runSelfTest(logPath: log)
             return
         }
