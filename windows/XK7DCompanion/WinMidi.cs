@@ -12,7 +12,7 @@ public sealed class WinMidiConnection : IMidiOutput, IDisposable
 {
     // winmm.dll
     const int CALLBACK_NULL = 0, CALLBACK_FUNCTION = 0x30000;
-    const int MIM_DATA = 0x3C3, MIM_LONGDATA = 0x3C4;
+    const int MIM_DATA = 0x3C3, MIM_LONGDATA = 0x3C4, MIM_LONGERROR = 0x3C6;
     const int MMSYSERR_ALLOCATED = 4;
     const int MHDR_DONE = 1;
 
@@ -84,12 +84,18 @@ public sealed class WinMidiConnection : IMidiOutput, IDisposable
     MidiInProc? callback;                      // kept alive while WinMM may call it
     readonly List<IntPtr> inHeaders = new();
     volatile bool closing;
+    /// <summary>Which opening of the input a callback belongs to (WinMM hands it back as the
+    /// instance value). A buffer from an earlier opening is never queued again: it has been freed,
+    /// and a reopened port can get the same handle value.</summary>
+    int generation;
     BlockingCollection<byte[]>? sendQueue;
     Thread? sender;
 
     public WinMidiConnection(Action<Action> post) { this.post = post; }
 
     public bool CanSend => outHandle != IntPtr.Zero;
+    /// <summary>Why the output couldn't be opened, as a sentence, or null.</summary>
+    public string? OutputProblem { get; private set; }
 
     /// <summary>Input port names, in WinMM's order.</summary>
     public static List<string> InputNames()
@@ -151,7 +157,9 @@ public sealed class WinMidiConnection : IMidiOutput, IDisposable
         var inId = InputNames().IndexOf(name);
         if (inId < 0) throw new InvalidOperationException($"The MIDI port {name} is not available.");
         callback = OnMidiIn;
-        var r = midiInOpen(out inHandle, inId, callback, IntPtr.Zero, CALLBACK_FUNCTION);
+        OutputProblem = null;
+        generation++;
+        var r = midiInOpen(out inHandle, inId, callback, new IntPtr(generation), CALLBACK_FUNCTION);
         if (r != 0)
         {
             inHandle = IntPtr.Zero;
@@ -173,8 +181,15 @@ public sealed class WinMidiConnection : IMidiOutput, IDisposable
         if (outId >= 0)
         {
             r = midiOutOpen(out outHandle, outId, IntPtr.Zero, IntPtr.Zero, CALLBACK_NULL);
-            if (r != 0) outHandle = IntPtr.Zero;   // listening still works; sending is said to be unavailable
+            if (r != 0)
+            {
+                outHandle = IntPtr.Zero;   // listening still works; sending is said to be unavailable
+                OutputProblem = r == MMSYSERR_ALLOCATED
+                    ? $"Another program is using {name}'s MIDI output, so changes can't be sent. Close it, then choose the organ again."
+                    : $"Windows couldn't open {name}'s MIDI output (MIDI error {r}), so changes can't be sent.";
+            }
         }
+        else OutputProblem = $"{name} has no MIDI output Windows could find, so changes can't be sent.";
         if (outHandle != IntPtr.Zero)
         {
             sendQueue = new BlockingCollection<byte[]>();
@@ -229,18 +244,26 @@ public sealed class WinMidiConnection : IMidiOutput, IDisposable
             var bytes = new[] { status, (byte)((packed >> 8) & 0x7F), (byte)((packed >> 16) & 0x7F) }.Take(len).ToArray();
             post(() => OnReceive?.Invoke(bytes));
         }
-        else if (msg == MIM_LONGDATA)
+        else if (msg is MIM_LONGDATA or MIM_LONGERROR)
         {
+            // MIM_LONGERROR is a broken SysEx message. Its buffer still has to go back to WinMM, or
+            // each one would take a buffer away for good, and after 16 no SysEx would arrive at all.
             var hdr = p1;
-            var count = Marshal.ReadInt32(hdr, BytesRecordedOffset);
-            var data = Marshal.ReadIntPtr(hdr);
-            var bytes = new byte[count];
-            if (count > 0) Marshal.Copy(data, bytes, 0, count);
+            var bytes = Array.Empty<byte>();
+            if (msg == MIM_LONGDATA)
+            {
+                var count = Marshal.ReadInt32(hdr, BytesRecordedOffset);
+                var data = Marshal.ReadIntPtr(hdr);
+                bytes = new byte[count];
+                if (count > 0) Marshal.Copy(data, bytes, 0, count);
+            }
             var handle = h;
+            var opening = instance.ToInt32();
             post(() =>
             {
                 if (bytes.Length > 0) OnReceive?.Invoke(bytes);
-                if (!closing && handle == inHandle) midiInAddBuffer(handle, hdr, HdrSize);
+                if (!closing && opening == generation && handle == inHandle && inHeaders.Contains(hdr))
+                    midiInAddBuffer(handle, hdr, HdrSize);
             });
         }
     }

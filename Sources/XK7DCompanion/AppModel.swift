@@ -96,6 +96,8 @@ final class AppModel {
 
     /// True while the chosen organ's port has gone (unplugged or turned off).
     private(set) var organMissing = false
+    /// False when the chosen port has no MIDI input to send to: the app can only listen.
+    private(set) var canSend = true
 
     private func portsChanged() {
         let change = PortPolicy.afterPortsChanged(choice: choice, missing: organMissing,
@@ -129,6 +131,7 @@ final class AppModel {
         loopback = nil
         simulatorPorts = nil
         session.output = nil
+        canSend = true
         choice = c
         switch c {
         case .none:
@@ -144,6 +147,7 @@ final class AppModel {
             do {
                 try connection?.connect(source: src, destination: dst)
                 session.output = connection
+                canSend = dst != nil
                 statusText = dst == nil ? "Listening to \(name). It has no MIDI input, so changes cannot be sent."
                                         : "Connected to \(name). Checking that the organ answers…"
                 session.forgetAllValues()
@@ -151,6 +155,7 @@ final class AppModel {
                 scheduleAnswerCheck(name: name)
             } catch {
                 statusText = "Could not connect to \(name): \(error)"
+                announcer.announce(statusText, force: true)
             }
         }
         NotificationCenter.default.post(name: .connectionChanged, object: nil)
@@ -199,11 +204,14 @@ final class AppModel {
 
     /// What to say when something needs the organ and there isn't one.
     var notConnectedMessage: String {
-        organMissing ? "The organ is disconnected, so nothing was sent. Check the USB cable and that the organ is on."
-                     : "Not connected. Choose the organ or the simulator first."
+        PortPolicy.cannotSend(choice: choice, hasOutput: session.output != nil, missing: organMissing, canSend: canSend)
+            ?? "Not connected. Choose the organ or the simulator first."
     }
 
-    var isConnected: Bool { choice != .none && session.output != nil && !organMissing }
+    /// Changes can be sent: connected, the port is there, and it can be sent to.
+    var isConnected: Bool {
+        PortPolicy.cannotSend(choice: choice, hasOutput: session.output != nil, missing: organMissing, canSend: canSend) == nil
+    }
 
     // MARK: Values
 

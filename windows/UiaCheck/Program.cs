@@ -127,7 +127,55 @@ try
     Check(refused, "a value outside the range is refused");
     Check(Find(main, $"Type a value for {slow.Parameter.Name}", ControlType.Edit) is not null, "the typed-value box is named for its setting");
 
-    // 9. Close: the process ends cleanly.
+    // 9. A choice list sends only on Enter. Arrowing through Organ Type must not send each type.
+    var organType = db.SettingAt(new Address(0, 0, 0, 0x10, 0x04))!;
+    var options = organType.Parameter.Kind.Options;
+    string Sent(int i) => Hex(XK7SysEx.DataSet(0, organType, options[i].Raw));
+    bool LogHas(string hex) => Descendants(log, ControlType.ListItem).Any(i => i.Current.Name == hex);
+    string LastSaid() => Descendants(historyList, ControlType.ListItem).FirstOrDefault()?.Current.Name ?? "";
+    ((ValuePattern)search.GetCurrentPattern(ValuePattern.Pattern)).SetValue("organ type");
+    var typeRow = Wait(() => Descendants(Find(main, "Settings", ControlType.Tree), ControlType.TreeItem)
+        .FirstOrDefault(i => i.Current.Name.StartsWith("Organ type:", StringComparison.Ordinal)), 10)!;
+    ((SelectionItemPattern)typeRow.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+    var typeBox = Wait(() => TryFind(main, "Organ type", ControlType.ComboBox), 10) ?? throw new Exception("no Organ type list");
+    string Shown() => ((SelectionPattern)typeBox.GetCurrentPattern(SelectionPattern.Pattern)).Current.GetSelection().FirstOrDefault()?.Current.Name ?? "";
+    Check(Shown() == "Not heard yet", $"Organ type starts as \"{Shown()}\"");
+    Check(typeBox.Current.HelpText.Contains("Enter", StringComparison.Ordinal), "its help text says Enter sends");
+    Focus(main, typeBox);
+    Key(VK_DOWN); Thread.Sleep(400); Key(VK_DOWN); Thread.Sleep(700);
+    Check(Shown() == options[1].Label, $"two Down Arrows show \"{Shown()}\"");
+    Check(!LogHas(Sent(0)) && !LogHas(Sent(1)), "arrowing sent nothing to the simulator");
+    Key(VK_RETURN); Thread.Sleep(700);
+    Check(LogHas(Sent(1)), $"Enter sent {options[1].Label} ({Sent(1)})");
+    Check(LastSaid() == $"Organ type sent: {options[1].Label}", $"and said so: \"{LastSaid()}\"");
+    Key(VK_DOWN); Thread.Sleep(400); Key(VK_ESCAPE); Thread.Sleep(700);
+    Check(!LogHas(Sent(2)), "Down Arrow then Escape sent nothing");
+    Check(Shown() == options[1].Label, $"Escape put back {options[1].Label}: shows \"{Shown()}\"");
+    Check(LastSaid() == "Nothing sent.", $"and said \"{LastSaid()}\"");
+    Key(VK_DOWN); Thread.Sleep(400); Key(VK_TAB); Thread.Sleep(900);
+    Check(!LogHas(Sent(2)), "Down Arrow then Tab away sent nothing");
+    Check(Shown() == options[1].Label, $"leaving put back {options[1].Label}: shows \"{Shown()}\"");
+    Check(LastSaid() == "Organ type: nothing sent.", $"and said \"{LastSaid()}\"");
+    Focus(main, typeBox);
+    Keys(VK_MENU, VK_DOWN); Thread.Sleep(600);
+    Key(VK_DOWN); Thread.Sleep(300); Key(VK_ESCAPE); Thread.Sleep(800);
+    Check(!LogHas(Sent(2)), "in the open list, Down Arrow then Escape sent nothing");
+    Check(Shown() == options[1].Label, $"and the list still shows \"{Shown()}\"");
+    Keys(VK_MENU, VK_DOWN); Thread.Sleep(600);
+    Key(VK_DOWN); Thread.Sleep(300); Key(VK_RETURN); Thread.Sleep(800);
+    Check(LogHas(Sent(2)), $"in the open list, Down Arrow then Enter sent {options[2].Label}");
+    Check(Shown() == options[2].Label && LastSaid() == $"Organ type sent: {options[2].Label}", $"shows \"{Shown()}\", said \"{LastSaid()}\"");
+
+    // 10. The Organ list connects only on Enter: arrowing to Not connected doesn't disconnect.
+    var portList = Find(main, "Organ", ControlType.ComboBox);
+    Focus(main, portList);
+    Key(VK_UP); Thread.Sleep(900);
+    Check(main.Current.Name == "XK-7D Companion - Built-in simulator (not a real organ)", $"Up Arrow in the Organ list changed nothing: \"{main.Current.Name}\"");
+    Key(VK_ESCAPE); Thread.Sleep(700);
+    var portShown = ((SelectionPattern)portList.GetCurrentPattern(SelectionPattern.Pattern)).Current.GetSelection().FirstOrDefault()?.Current.Name;
+    Check(portShown == "Built-in simulator (not a real organ)", $"Escape put the simulator back: \"{portShown}\"");
+
+    // 11. Close: the process ends cleanly.
     ((WindowPattern)main.GetCurrentPattern(WindowPattern.Pattern)).Close();
     Check(proc.WaitForExit(15000), "closing the main window quits the app");
     Check(proc.HasExited && proc.ExitCode == 0, $"exit code {(proc.HasExited ? proc.ExitCode : -1)}");
@@ -209,13 +257,22 @@ static void Key(ushort vk)
     SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
 }
 
+/// <summary>A key with a modifier held, such as Alt Down Arrow.</summary>
+static void Keys(ushort modifier, ushort vk)
+{
+    INPUT K(ushort v, uint flags) => new INPUT { type = 1, u = new InputUnion { ki = new KEYBDINPUT { wVk = v, dwFlags = flags } } };
+    var inputs = new[] { K(modifier, 0), K(vk, 0), K(vk, 2), K(modifier, 2) };
+    SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+}
+
 [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
 [DllImport("oleacc.dll")] static extern int AccessibleObjectFromPoint(POINT pt, [MarshalAs(UnmanagedType.Interface)] out Accessibility.IAccessible acc, out object child);
 [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
 
 partial class Program
 {
-    const ushort VK_UP = 0x26, VK_PRIOR = 0x21, VK_HOME = 0x24;
+    const ushort VK_UP = 0x26, VK_DOWN = 0x28, VK_PRIOR = 0x21, VK_HOME = 0x24, VK_RETURN = 0x0D, VK_ESCAPE = 0x1B,
+        VK_TAB = 0x09, VK_MENU = 0x12;
 }
 
 [StructLayout(LayoutKind.Sequential)]

@@ -202,4 +202,15 @@ public static class PortPolicy
                 return new Change.Nothing();
         }
     }
+
+    /// <summary>Why a change can't be sent to the organ right now, as a sentence to say, or null when it
+    /// can. hasOutput is false when nothing is open; canSend is false when the port could only be
+    /// opened for listening, so a change would go nowhere while the app said it was sent.</summary>
+    public static string? CannotSend(PortChoice choice, bool hasOutput, bool missing, bool canSend)
+    {
+        if (missing) return "The organ is disconnected, so nothing was sent. Check the USB cable and that the organ is on.";
+        if (choice is PortChoice.None || !hasOutput) return "Not connected. Choose the organ or the simulator first.";
+        if (!canSend) return "The app can listen to this MIDI port but can't send to it, so nothing was sent. Choose the organ again, or check that no other program is using it.";
+        return null;
+    }
 }

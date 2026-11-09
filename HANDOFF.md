@@ -1,7 +1,7 @@
 # Hand-off notes
 
-Version 1.1.0 adds a Windows version, and updates through Sparkle on the Mac
-and WinSparkle on Windows. Both versions have been tested against the
+Version 1.1.0 added a Windows version, and updates through Sparkle on the Mac
+and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1". Both versions have been tested against the
 built-in simulator only. Neither has been connected to a real XK-7D. The
 Windows version has been built and tested on GitHub's Windows runners, and
 nobody has used it yet with a screen reader on a real PC.
@@ -121,9 +121,16 @@ messages until the simulator answers isn't needed there.
   the row again on top of the announcement.
 - The tree's expand toggles are left out of what screen readers see
   (`RowPeer`); the row itself expands with the arrow keys.
-- Choices are a drop-down list. Arrow keys on the closed list send each
-  choice, as Windows lists do; Alt Down Arrow opens it to look without
-  sending. The help text says so.
+- Choices are a drop-down list, and since 1.1.1 they send only on purpose
+  (`PickOnEnter` in `UiKit.cs`). The arrow keys on the closed list only move,
+  and the screen reader reads each item; Enter sends it and the app says
+  "Organ type sent: Pipe". In the open list (Alt Down Arrow) Enter or a click
+  sends. Escape, or leaving the list, puts back what was there and sends
+  nothing. Windows lists normally pick as you arrow, which on an organ would
+  send every Organ Type on the way. The Organ list works the same way, so
+  arrowing past a MIDI port doesn't open it. WPF commits the open list's
+  choice in a different order for keys and the mouse, so the decision waits
+  until the list has closed. UiaCheck presses the real keys.
 - Control W minimizes and says "Window minimized. Still listening." Closing
   the window (Alt F4) quits, as Windows apps do. Only one copy can run, since
   two would fight over the organ's port.
@@ -342,7 +349,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Mac updates | Rehearsal on the Studio: tampered refused, good one installed (above) |
 | Windows updates | CI's update rehearsal (above) |
 
-Tests: Swift, 101 unit tests and 5 integration tests. C#, 117 tests.
+Tests: Swift, 108 unit tests and 5 integration tests. C#, 124 tests.
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -525,6 +532,42 @@ might never answer and must still get your changes.
 The Developer ID comes from the Keychain, and the App Store Connect key from
 the Keychain entry `asc-api-key`. Nothing secret is in the repository or on
 GitHub.
+
+## Changes in 1.1.1 (independent review)
+
+- **Choices send only when picked (Windows).** See "UI details" above. The
+  Mac already worked this way: AppKit's popup button opens its menu on the
+  arrow keys and only acts when an item is chosen. That's from AppKit's
+  documented behavior, not from a key-press test, since tests here can't put
+  a menu on screen. Both now say what they sent.
+- **A value the manual doesn't list.** If the organ reports a value outside
+  a setting's range, the slider shows it ("..., outside the manual's range")
+  and won't step from it, like "not heard yet". A choice list shows it as
+  "Unknown value N". Before, the slider snapped to the nearest end and the
+  arrow keys sent from there. `Parameter.holds` / `Holds` in both cores.
+- **"Sent" only when it was.** A port the app can only listen to (no MIDI
+  output, or another program has the output) no longer gets "sent"
+  confirmations. Both apps ask `PortPolicy.cannotSend` / `CannotSend`.
+  After a failed send the Mac's controls now go back to what the organ has.
+- **Windows MIDI input.** A broken SysEx message (`MIM_LONGERROR`) used to
+  keep its input buffer; after 16 of them no SysEx would arrive. And a
+  buffer from an earlier opening of the port could be handed back to WinMM
+  after it was freed, when the port was reopened quickly with the same
+  handle value. Each opening now has a number WinMM passes back.
+- **Windows voice.** Prism's OneCore and SAPI backends were freed right after
+  each speak call, which can cut the speech off. They're kept open now, as
+  Wavelength keeps its own. Screen readers are still asked afresh each time.
+- **Smaller things.** Choosing the Organ list's current port again reconnects
+  if it isn't working (Windows). A second Read from Organ replaces the first
+  (Windows). The update news waits its turn on the Mac too (VoiceOver's medium
+  priority). Windows menu items have access keys. A Mac port that fails to
+  connect is now said, not only shown.
+- **Release check.** `release.sh` checks both published update lists with the
+  public key the apps carry (`tools/verify-appcast.swift`): signature and
+  length against the downloaded file.
+
+Spot-checked 39 more table rows against the manual's page images (pp.
+178-185, random sample). No mismatches.
 
 ## Changes in 1.1.0
 

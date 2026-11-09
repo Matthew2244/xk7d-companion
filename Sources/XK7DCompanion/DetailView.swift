@@ -91,7 +91,7 @@ final class DetailView: NSView {
             popup.action = #selector(choiceChanged)
             popup.addItems(withTitles: options.map(\.label))
             popup.setAccessibilityLabel(p.name)
-            popup.toolTip = "Choosing a value sends it to the organ straight away. \(help)"
+            popup.toolTip = "Choose a value from the menu to send it to the organ. \(help)"
             popup.setAccessibilityHelp(popup.toolTip)
             choicePopup = popup
             stack.addArrangedSubview(row([makeLabel("\(p.name):"), popup]))
@@ -101,8 +101,10 @@ final class DetailView: NSView {
             s.toolTip = "Arrow keys change the value by one step, Page Up and Page Down by ten percent, Home and End go to the ends. Each change is sent to the organ. \(help)"
             s.setAccessibilityHelp(s.toolTip)
             s.onCommit = { [weak self] raw in self?.commit(raw) }
-            s.onUnknownStep = { [weak self] in
-                self?.model?.announcer.announce("Not heard yet, so nothing was sent. Type a value below, or change it on the organ so the app hears it.", force: true)
+            s.onUnknownStep = { [weak self, weak s] in
+                let text = s?.outOfRange.map { "The organ reported \(p.spoken($0)), which is outside the manual's range, so nothing was sent. Type a value below." }
+                    ?? "Not heard yet, so nothing was sent. Type a value below, or change it on the organ so the app hears it."
+                self?.model?.announcer.announce(text, force: true)
             }
             s.target = self
             s.action = #selector(sliderMoved)
@@ -183,11 +185,18 @@ final class DetailView: NSView {
             if let raw, let i = options.firstIndex(where: { $0.raw == raw }) {
                 if choiceHasPlaceholder { popup.removeItem(at: 0); choiceHasPlaceholder = false }
                 if popup.indexOfSelectedItem != i { popup.selectItem(at: i) }
-            } else if !choiceHasPlaceholder {
-                popup.insertItem(withTitle: "Not heard yet", at: 0)
+            } else {
+                // Not reported yet, or a value the manual doesn't list: shown, never offered.
+                let title = raw.map { p.display($0) } ?? "Not heard yet"
+                if !choiceHasPlaceholder {
+                    popup.insertItem(withTitle: title, at: 0)
+                    choiceHasPlaceholder = true
+                } else {
+                    popup.item(at: 0)?.title = title
+                }
+                popup.autoenablesItems = false
                 popup.item(at: 0)?.isEnabled = false
                 popup.selectItem(at: 0)
-                choiceHasPlaceholder = true
             }
         }
         if let slider {
@@ -203,12 +212,19 @@ final class DetailView: NSView {
         refreshValue()
     }
 
+    /// A value picked from the menu. AppKit's popup button only sends this when an item is chosen:
+    /// the arrow keys open the menu rather than stepping through it, and Escape closes it without
+    /// choosing. So walking through Organ Type sends nothing until one is picked.
     @objc private func choiceChanged() {
         guard let popup = choicePopup, let p = parameter, case .choices(let options) = p.kind else { return }
         var i = popup.indexOfSelectedItem
         if choiceHasPlaceholder { i -= 1 }
-        guard i >= 0, i < options.count else { return }
+        guard i >= 0, i < options.count else { refreshValue(); return }
         commit(options[i].raw)
+        // VoiceOver reads the menu closing, not the sending, so say what went out.
+        if let s = setting, model?.isConnected == true {
+            model?.announcer.announce("\(s.spokenName) sent: \(p.spoken(options[i].raw))", force: true)
+        }
     }
 
     @objc private func sliderMoved() {
@@ -248,8 +264,9 @@ final class DetailView: NSView {
     private func commit(_ raw: Int) {
         guard let s = setting else { return }
         model?.send(s, raw: s.parameter.clamp(raw))
-        valueLabel?.stringValue = s.parameter.display(s.parameter.clamp(raw))
-        slider?.refreshDescription()
+        // Show what the session now holds: the new value, or, if nothing could be sent (no organ),
+        // what was known before. A control must never show a value the organ wasn't sent.
+        refreshValue()
     }
 
     func parse(_ text: String, for p: Parameter) -> Int? { p.rawValue(fromTyped: text) }

@@ -276,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
               !model.announcer.muted else { return }
         updateNotice = nil
         UserDefaults.standard.set(notice.version, forKey: "toldUpdateVersion")
-        model.announcer.announce(notice.text)
+        model.announcer.announce(notice.text, polite: true)
     }
 
     @objc func checkForUpdates(_ sender: Any?) {
@@ -325,7 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Changes you make on the organ are spoken, name first. A knob that is turning is spoken once it stops.
 
-        Browse or search every setting in the list. Each row shows its value; "not heard yet" means the organ has not reported it. Press Tab to reach the editor; changes are sent at once.
+        Browse or search every setting in the list. Each row shows its value; "not heard yet" means the organ has not reported it. Press Tab to reach the editor. A slider or a typed value is sent at once. A choice is sent when you pick it from the menu, and the app says what it sent.
 
         Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift U set up the organ, Command Shift M mute, Command Shift L repeat the last announcement, Command S save the last organ snapshot, Command 1 this window, Command 2 the simulator, Command comma settings, Command U check for updates.
 

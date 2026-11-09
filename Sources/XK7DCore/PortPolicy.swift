@@ -64,4 +64,14 @@ public enum PortPolicy {
             return .nothing
         }
     }
+
+    /// Why a change can't be sent to the organ right now, as a sentence to say, or nil when it can.
+    /// `hasOutput` is false when nothing is open; `canSend` is false when the port could only be
+    /// opened for listening, so a change would go nowhere while the app said it was sent.
+    public static func cannotSend(choice: PortChoice, hasOutput: Bool, missing: Bool, canSend: Bool) -> String? {
+        if missing { return "The organ is disconnected, so nothing was sent. Check the USB cable and that the organ is on." }
+        if choice == .none || !hasOutput { return "Not connected. Choose the organ or the simulator first." }
+        if !canSend { return "The app can listen to this MIDI port but can't send to it, so nothing was sent. Choose the organ again, or check that no other program is using it." }
+        return nil
+    }
 }

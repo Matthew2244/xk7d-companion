@@ -31,11 +31,14 @@ func describeManualSource(_ p: Parameter, setting: Setting) -> String {
 final class ParameterSlider: NSSlider {
     var parameter: Parameter!
     var known = false
+    /// A value the organ reported that the manual doesn't list (outside the range). Shown, but
+    /// never stepped from.
+    private(set) var outOfRange: Int?
     var onCommit: ((Int) -> Void)?
 
     var raw: Int {
         get { Int(doubleValue.rounded()) }
-        set { doubleValue = Double(newValue); known = true; refreshDescription() }
+        set { doubleValue = Double(newValue); known = true; outOfRange = nil; refreshDescription() }
     }
 
     func configure(_ p: Parameter, raw: Int?) {
@@ -43,11 +46,16 @@ final class ParameterSlider: NSSlider {
         minValue = Double(p.rawRange.lowerBound)
         maxValue = Double(p.rawRange.upperBound)
         isContinuous = true
-        if let raw { self.raw = raw } else { doubleValue = minValue; known = false; refreshDescription() }
+        if let raw, p.holds(raw) {
+            self.raw = raw
+        } else {
+            doubleValue = minValue; known = false; outOfRange = raw; refreshDescription()
+        }
     }
 
     func refreshDescription() {
-        let text = known ? parameter.spoken(raw) : "not heard yet"
+        let text = known ? parameter.spoken(raw)
+            : outOfRange.map { "\(parameter.spoken($0)), outside the manual's range" } ?? "not heard yet"
         setAccessibilityValueDescription(text)
     }
 

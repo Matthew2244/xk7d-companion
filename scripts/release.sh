@@ -85,6 +85,12 @@ cmp -s "$WORK/appcast.xml" build/appcast.xml || { echo "The published appcast.xm
 cmp -s "$WORK/appcast-windows.xml" build/appcast-windows.xml || { echo "The published appcast-windows.xml differs."; exit 1; }
 curl -fsSL "$BASE/$ZIP_NAME" -o "$WORK/check.zip"
 cmp -s "$WORK/check.zip" "$ZIP" || { echo "The published zip differs."; exit 1; }
+curl -fsSL "$BASE/$SETUP_NAME" -o "$WORK/check-setup.exe"
+# Each list's signature and length must match the published file, checked with the public key the apps carry.
+PUBLIC_KEY=$(sed -n 's/^PUBLIC_KEY=//p' scripts/build-app.sh)
+grep -q "\"$PUBLIC_KEY\"" windows/XK7DCompanion/Updates.cs || { echo "The Mac and Windows public keys differ."; exit 1; }
+swift tools/verify-appcast.swift "$PUBLIC_KEY" "$WORK/appcast.xml" "$WORK/check.zip"
+swift tools/verify-appcast.swift "$PUBLIC_KEY" "$WORK/appcast-windows.xml" "$WORK/check-setup.exe"
 mkdir "$WORK/unzipped"
 ditto -x -k "$WORK/check.zip" "$WORK/unzipped"
 # As if downloaded with a browser: Gatekeeper must accept it (not opened, only assessed).

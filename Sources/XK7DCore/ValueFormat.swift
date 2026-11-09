@@ -83,6 +83,14 @@ extension Parameter {
 
     /// The step a slider or stepper should take with the arrow keys.
     public func clamp(_ raw: Int) -> Int { min(max(raw, rawRange.lowerBound), rawRange.upperBound) }
+
+    /// Whether `raw` is a value the manual lists for this setting. The organ could report one that
+    /// isn't (a gap in the manual); an editor must not step from it, since every value it offered
+    /// would be a guess.
+    public func holds(_ raw: Int) -> Bool {
+        if case .choices(let o) = kind { return o.contains { $0.raw == raw } }
+        return rawRange.contains(raw)
+    }
 }
 
 /// Text values: the organ uses 7-bit ASCII, padded to 16 characters.

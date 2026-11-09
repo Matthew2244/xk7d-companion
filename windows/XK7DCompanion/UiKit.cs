@@ -92,6 +92,86 @@ static class Modal
     }
 }
 
+/// <summary>Makes a drop-down list choose only on purpose. On a closed Windows list the arrow keys
+/// pick each item as focus lands on it; on an organ that would send every value passed on the way
+/// (every Organ Type, every vibrato mode). With this, the arrow keys only move and the screen reader
+/// speaks the item. Enter picks it. In the open list (Alt Down Arrow), Enter or a click picks.
+/// Escape, or leaving the list without Enter, puts back what was there and picks nothing.
+///
+/// The decision is made after the list closes (deferred), because WPF commits the highlighted item
+/// in a different order for keys and for the mouse.</summary>
+public sealed class PickOnEnter
+{
+    readonly ComboBox box;
+    readonly Func<int> committed;
+    readonly Action<int> pick;
+    readonly Action<bool> putBack;
+    bool enterInOpenList, escapeInOpenList;
+
+    /// <param name="committed">The index that shows what is really set.</param>
+    /// <param name="pick">Enter, or a choice picked in the open list, with that item's index.</param>
+    /// <param name="putBack">Put the committed item back; true when the focus left the list,
+    /// false for Escape. Only called when a different item was showing.</param>
+    public PickOnEnter(ComboBox box, Func<int> committed, Action<int> pick, Action<bool> putBack)
+    {
+        this.box = box;
+        this.committed = committed;
+        this.pick = pick;
+        this.putBack = putBack;
+        box.PreviewKeyDown += KeyDown;
+        box.DropDownOpened += (_, _) => { enterInOpenList = false; escapeInOpenList = false; };
+        box.DropDownClosed += (_, _) => box.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, Closed);
+        box.LostKeyboardFocus += (_, _) => box.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, Left);
+    }
+
+    /// <summary>A different item is showing than the one that's really set.</summary>
+    public bool Pending => box.SelectedIndex >= 0 && box.SelectedIndex != committed();
+
+    void KeyDown(object sender, KeyEventArgs e)
+    {
+        var mods = Keyboard.Modifiers;
+        if (box.IsDropDownOpen)
+        {
+            if (e.Key == Key.Enter && mods == ModifierKeys.None) enterInOpenList = true;
+            else if (e.Key == Key.Escape) escapeInOpenList = true;
+            return;   // the list itself handles them
+        }
+        if (mods != ModifierKeys.None) return;
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            if (box.SelectedIndex >= 0) pick(box.SelectedIndex);
+        }
+        else if (e.Key == Key.Escape && Pending)
+        {
+            e.Handled = true;
+            putBack(false);
+        }
+    }
+
+    void Closed()
+    {
+        var enter = enterInOpenList;
+        var escape = escapeInOpenList;
+        enterInOpenList = escapeInOpenList = false;
+        if (escape)
+        {
+            if (Pending) putBack(false);
+        }
+        else if (enter || Pending)
+        {
+            // Enter, a click on an item, or Alt Up Arrow on the one highlighted.
+            if (box.SelectedIndex >= 0) pick(box.SelectedIndex);
+        }
+    }
+
+    void Left()
+    {
+        if (box.IsKeyboardFocusWithin || box.IsDropDownOpen || !Pending) return;
+        putBack(true);
+    }
+}
+
 /// <summary>A slider that steps one raw value per arrow key and reads the organ's display value
 /// ("340 rpm", not "141"), treating "not heard yet" as a real state rather than pretending to know.
 /// The Windows counterpart of the Mac's ParameterSlider.
@@ -102,6 +182,9 @@ public sealed class ValueSlider : Slider
 {
     public Parameter? Parameter { get; private set; }
     public bool Known { get; private set; }
+    /// <summary>A value the organ reported that the manual doesn't list (outside the range). Shown, but
+    /// never stepped from.</summary>
+    public int? OutOfRange { get; private set; }
     /// <summary>A value the person chose: send it.</summary>
     public Action<int>? OnCommit { get; set; }
     /// <summary>Called instead of sending when the value is unknown: any value picked would be a
@@ -122,7 +205,9 @@ public sealed class ValueSlider : Slider
 
     public int Raw => (int)Math.Round(Value);
 
-    public string ValueText => Known && Parameter is { } p ? p.Spoken(Raw) : "not heard yet";
+    public string ValueText => Parameter is not { } p ? "not heard yet"
+        : Known ? p.Spoken(Raw)
+        : OutOfRange is { } o ? $"{p.Spoken(o)}, outside the manual's range" : "not heard yet";
 
     /// <summary>Show what the session knows, without sending anything.</summary>
     public void Configure(Parameter p, int? raw)
@@ -133,8 +218,9 @@ public sealed class ValueSlider : Slider
         Minimum = p.RawMin;
         Maximum = p.RawMax;
         LargeChange = Math.Max(1, p.RangeCount / 10);
-        if (raw is { } r) { Value = r; Known = true; }
-        else { Value = p.RawMin; Known = false; }
+        OutOfRange = null;
+        if (raw is { } r && p.Holds(r)) { Value = r; Known = true; }
+        else { Value = p.RawMin; Known = false; OutOfRange = raw; }
         quiet = false;
         RaiseValueText(old);
     }
@@ -151,6 +237,7 @@ public sealed class ValueSlider : Slider
         quiet = true;
         Value = raw;
         Known = true;
+        OutOfRange = null;
         quiet = false;
         OnCommit?.Invoke(raw);
         // At an end the value doesn't move; say it again so a key press is never met with silence.
@@ -194,8 +281,9 @@ public sealed class ValueSlider : Slider
     {
         base.OnValueChanged(oldValue, newValue);
         if (quiet || Parameter is null) return;
-        var old = Known && Parameter is { } p ? p.Spoken((int)Math.Round(oldValue)) : "not heard yet";
+        var old = Known && Parameter is { } p ? p.Spoken((int)Math.Round(oldValue)) : ValueText;
         Known = true;
+        OutOfRange = null;
         OnCommit?.Invoke(Raw);
         RaiseValueText(old);
     }

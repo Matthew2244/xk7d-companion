@@ -184,6 +184,12 @@ public static class ValueFormat
 
     public static int Clamp(this Parameter p, int raw) => Math.Min(Math.Max(raw, p.RawMin), p.RawMax);
 
+    /// <summary>Whether raw is a value the manual lists for this setting. The organ could report one
+    /// that isn't (a gap in the manual); an editor must not step from it, since every value it
+    /// offered would be a guess.</summary>
+    public static bool Holds(this Parameter p, int raw) =>
+        p.Kind.Type == ValueType.Choices ? p.Kind.Options.Any(o => o.Raw == raw) : raw >= p.RawMin && raw <= p.RawMax;
+
     /// <summary>A typed number as a whole number, or null when it's far outside any range.</summary>
     static int? Whole(double d) => double.IsFinite(d) && Math.Abs(d) < 1_000_000_000 ? (int)d : null;
 

@@ -22,7 +22,7 @@ public sealed class MainWindow : Window
     readonly List<(string Title, List<Parameter> Parameters)> categories = new();
     readonly Dictionary<string, List<TreeViewItem>> rowsById = new();
     readonly HashSet<TreeViewItem> staleRows = new();
-    bool updatingPorts;
+    List<PortChoice> shownChoices = new();
 
     public Action? ShowSimulator { get; set; }
     public Action? ShowSettings { get; set; }
@@ -98,7 +98,7 @@ public sealed class MainWindow : Window
         foreach (var m in new[] { file, edit, organ, speech, window, help }) menu.Items.Add(m);
         organ.SubmenuOpened += (_, _) => disconnectItem.IsEnabled = model.Choice is not PortChoice.None;
         file.SubmenuOpened += (_, _) => snapshotItem.IsEnabled = model.Snapshot is not null;
-        speech.SubmenuOpened += (_, _) => muteItem.Header = model.Announcer.Muted ? "Unmute Announcements" : "Mute Announcements";
+        speech.SubmenuOpened += (_, _) => muteItem.Header = model.Announcer.Muted ? "Un_mute Announcements" : "_Mute Announcements";
 
         Bind(FindCmd, FocusSearch);
         Bind(ListCmd, FocusList);
@@ -115,8 +115,12 @@ public sealed class MainWindow : Window
         Bind(UpdatesCmd, () => CheckForUpdates?.Invoke());
 
         // Top: organ choice and the two organ actions.
-        portBox = new ComboBox { MinWidth = 280 }.Named("Organ", "Choose the organ's USB MIDI port (it shows as XK-7 or similar), or the built-in simulator.");
-        portBox.SelectionChanged += (_, _) => PortChosen();
+        portBox = new ComboBox { MinWidth = 280 }.Named("Organ", "Choose the organ's USB MIDI port (it shows as XK-7 or similar), or the built-in simulator. Arrow keys move through the list; press Enter to connect to the one you're on.");
+        _ = new PickOnEnter(portBox, () => shownChoices.FindIndex(c => c == model.Choice), PortChosen, leaving =>
+        {
+            RefreshConnection();
+            model.Announcer.Announce(leaving ? "Organ not changed." : "Not changed.", force: true, polite: leaving);
+        });
         var readButton = Ui.Button("Read from Organ", "Asks the organ to identify itself and send a memory dump. Control R.", (_, _) => ReadFromOrgan());
         var setupButton = Ui.Button("Set Up Organ for This App...", "Changes the organ's MIDI settings so it reports every change to this app. You choose which, and nothing is sent until you confirm.", (_, _) => SetUpOrgan());
         speakBox = new CheckBox { Content = "Speak organ changes", VerticalAlignment = VerticalAlignment.Center }
@@ -184,9 +188,19 @@ public sealed class MainWindow : Window
         Loaded += (_, _) => FocusList();
     }
 
+    /// <summary>Each menu item's access key (the underlined letter), unique within its menu.</summary>
+    static readonly Dictionary<RoutedUICommand, string> Headers = new()
+    {
+        [FindCmd] = "_Find Setting", [ListCmd] = "_Go to Settings List", [ReadCmd] = "_Read from Organ",
+        [SetupCmd] = "Set _Up Organ for This App...", [MuteCmd] = "_Mute Announcements", [RepeatCmd] = "_Repeat Last Announcement",
+        [MainCmd] = "_Main Window", [SimulatorCmd] = "_Simulator", [MinimizeCmd] = "Mi_nimize Window",
+        [SaveCmd] = "_Save Organ Snapshot...", [SettingsCmd] = "Se_ttings...", [HelpCmd] = "XK-7D Companion _Help",
+        [UpdatesCmd] = "Check for _Updates...",
+    };
+
     MenuItem Item(RoutedUICommand c, string? gesture = null)
     {
-        var m = new MenuItem { Command = c, Header = c.Text };
+        var m = new MenuItem { Command = c, Header = Headers.GetValueOrDefault(c, c.Text) };
         if (gesture is not null) m.InputGestureText = gesture;
         return m;
     }
@@ -359,25 +373,33 @@ public sealed class MainWindow : Window
 
     public void RefreshConnection()
     {
-        updatingPorts = true;
-        var choices = model.Choices();
+        shownChoices = model.Choices();
         portBox.Items.Clear();
-        foreach (var c in choices) portBox.Items.Add(c.Title);
-        portBox.SelectedIndex = Math.Max(0, choices.FindIndex(c => c == model.Choice));
-        updatingPorts = false;
+        foreach (var c in shownChoices) portBox.Items.Add(c.Title);
+        portBox.SelectedIndex = Math.Max(0, shownChoices.FindIndex(c => c == model.Choice));
         statusBox.Text = model.StatusText;
         speakBox.IsChecked = !model.Announcer.Muted;
         Title = $"XK-7D Companion - {(model.Choice is PortChoice.None ? "not connected" : model.Choice.Title)}";
         detail.RefreshValue();
     }
 
-    void PortChosen()
+    /// <summary>Enter on the Organ list. Choosing the port already in use connects again if it isn't
+    /// working (another program had it, say), as the Mac's popup does.</summary>
+    void PortChosen(int i)
     {
-        if (updatingPorts) return;
-        var choices = model.Choices();
-        var i = portBox.SelectedIndex;
-        if (i < 0 || i >= choices.Count || choices[i] == model.Choice) return;
-        model.Choose(choices[i]);
+        if (i < 0 || i >= shownChoices.Count) return;
+        var c = shownChoices[i];
+        if (c == model.Choice && (model.IsConnected || c is PortChoice.None))
+        {
+            model.Announcer.Announce($"Already {(c is PortChoice.None ? "not connected" : "using " + c.Title)}.", force: true);
+            return;
+        }
+        model.Choose(c);
+        // A port that wouldn't open has already said why.
+        if (c is PortChoice.None) model.Announcer.Announce("Not connected.", force: true);
+        else if (model.IsConnected) model.Announcer.Announce($"Connected to {c.Title}.", force: true);
+        else if (model.Session.Output is not null) model.Announcer.Announce(model.StatusText, force: true);
+        if (c is PortChoice.Simulator) ShowSimulator?.Invoke();
     }
 
     // Commands
@@ -471,7 +493,8 @@ public sealed class MainWindow : Window
         {
             "Choose your organ in the Organ list (it shows as XK-7 or similar over USB), or the built-in simulator.",
             "Changes you make on the organ are spoken, name first. A knob that is turning is spoken once it stops.",
-            "Browse or search every setting in the list. Each row shows its value; \"not heard yet\" means the organ has not reported it. Press Tab to reach the editor; changes are sent at once.",
+            "Browse or search every setting in the list. Each row shows its value; \"not heard yet\" means the organ has not reported it. Press Tab to reach the editor. A slider or a typed value is sent at once.",
+            "In a list of choices, such as Organ Type, the arrow keys move without sending anything. Press Enter to send the one you're on, and the app says what it sent. Escape puts back what was there. The Organ list works the same way: press Enter to connect.",
             "Keys: Control F search, Control L the settings list, Control R read from organ, Control Shift U set up the organ, Control Shift M mute, Control Shift L repeat the last announcement, Control S save the last organ snapshot, Control 1 this window, Control 2 the simulator, Control comma settings, Control U check for updates, F1 this help.",
             "To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx. Loading one of the organ's MIDI templates puts that back to NRPN, so run Set Up Organ again afterwards.",
             "If the organ is unplugged or turned off, the app says so, and connects again by itself when the organ comes back. If another program has the organ's MIDI port open, close it first.",

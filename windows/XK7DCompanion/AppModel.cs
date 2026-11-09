@@ -21,6 +21,7 @@ public sealed class AppModel
     LoopbackLink? loopback;
     readonly DispatcherTimer tickTimer, portTimer;
     DumpSnapshot? lastSnapshot;
+    DispatcherTimer? readTimer;
     List<string> lastDeviceNames = new();
 
     public event Action? ConnectionChanged;
@@ -159,7 +160,7 @@ public sealed class AppModel
                     connection.Connect(d.Name);
                     Session.Output = connection;
                     StatusText = !connection.CanSend
-                        ? $"Listening to {d.Name}. It has no MIDI output Windows could open, so changes can't be sent."
+                        ? $"Listening to {d.Name}. {connection.OutputProblem}"
                         : $"Connected to {d.Name}. Checking that the organ answers.";
                     Session.ForgetAllValues();
                     Session.RequestIdentity();
@@ -208,11 +209,13 @@ public sealed class AppModel
     }
 
     /// <summary>What to say when something needs the organ and there isn't one.</summary>
-    public string NotConnectedMessage => OrganMissing
-        ? "The organ is disconnected, so nothing was sent. Check the USB cable and that the organ is on."
-        : "Not connected. Choose the organ or the simulator first.";
+    public string NotConnectedMessage => SendProblem ?? "Not connected. Choose the organ or the simulator first.";
 
-    public bool IsConnected => Choice is not PortChoice.None && Session.Output is not null && !OrganMissing;
+    /// <summary>Changes can be sent: connected, the port is there, and it can be sent to.</summary>
+    public bool IsConnected => SendProblem is null;
+
+    string? SendProblem => PortPolicy.CannotSend(Choice, Session.Output is not null, OrganMissing,
+        canSend: Choice is not PortChoice.Device || connection.CanSend);
 
     // Values
 
@@ -239,12 +242,15 @@ public sealed class AppModel
     public void ReadFromOrgan(Action<string> completion)
     {
         if (!IsConnected) { completion(NotConnectedMessage); return; }
+        // A second Read from Organ replaces the first, as on the Mac: one wait, one answer.
+        readTimer?.Stop();
         Session.RequestIdentity();
         Session.RequestDump(DumpType.Temporary);
         var lastCount = -1;
         var attempt = 0;
         var expected = XK7SysEx.TemporaryPackets + XK7SysEx.AdjustPackets;
         var t = new DispatcherTimer(DispatcherPriority.Normal, dispatcher) { Interval = TimeSpan.FromMilliseconds(250) };
+        readTimer = t;
         void Check()
         {
             var count = Session.CurrentDump?.Count ?? 0;

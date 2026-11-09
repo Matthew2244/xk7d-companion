@@ -45,9 +45,11 @@ then Run anyway.
 - **Lists the settings the manual gives a MIDI address for.** There are 537,
   by category, with a search field. Each row reads "name: value", so you
   don't have to select a setting to hear its value.
-- **Sends your changes to the organ straight away.** Named choices use a
-  popup menu on the Mac and a drop-down list on Windows. Numbers use a slider, plus
-  a box where you can type the value the way the organ shows it.
+- **Sends your changes to the organ.** Numbers use a slider, plus a box where
+  you can type the value the way the organ shows it, and each change is sent
+  straight away. Named choices, such as Organ Type, use a popup menu on the
+  Mac and a drop-down list on Windows. A choice is sent only when you pick it,
+  and the app says what it sent. See "Choosing from a list" below.
 - **Doesn't guess.** The organ can't be asked for one setting's value. Until
   the organ reports a setting, or you set it from the app, it reads "not
   heard yet". The slider won't move from the keyboard until then, because the
@@ -85,9 +87,27 @@ selected setting. In a slider, the arrow keys step by one. Page Up and Page
 Down move a tenth of the range. The screen reader reads the value as the
 organ's display shows it.
 
+### Choosing from a list
+
+Walking through a list of choices doesn't send anything. That matters on an
+organ: arrowing from Tone Wheel to Pipe in Organ Type shouldn't send every
+type on the way.
+
+- **Mac:** VO Space opens the popup menu. Choose an item and it's sent.
+  Escape closes the menu and sends nothing.
+- **Windows:** the arrow keys move through the closed list and the screen
+  reader reads each choice, but nothing is sent. Press Enter to send the one
+  you're on. Alt Down Arrow opens the list; Enter there sends too. Escape puts
+  back what was there. If you Tab away without pressing Enter, nothing is sent
+  and the app says so.
+
+Either way the app then says what it sent, for example "Organ type sent:
+Pipe". The Organ list on Windows works the same way: arrow to the organ and
+press Enter to connect.
+
 On Windows, a MIDI port can usually be open in only one program at a time.
-If another program is using the organ, the app says so. Close that program
-and choose the organ again.
+If another program is using the organ, the app says so. Close that program,
+then choose the organ in the Organ list and press Enter.
 
 ## Keys
 

@@ -60,27 +60,41 @@ public static class Prism
         return context != IntPtr.Zero;
     }
 
+    /// <summary>Voice backends kept between announcements. A voice (OneCore, SAPI) plays its audio
+    /// after speak returns; freeing the backend straight away can cut it off, so these stay open,
+    /// as Wavelength keeps its own. Screen readers are asked afresh each time, since one can be
+    /// started or quit at any moment.</summary>
+    static readonly Dictionary<ulong, IntPtr> kept = new();
+
     /// <summary>The first of these backends that is running and takes the text. Returns its name, or null.</summary>
-    static string? Try((ulong Id, string Name)[] backends, string text, bool interrupt, bool needRunning)
+    static string? Try((ulong Id, string Name)[] backends, string text, bool interrupt, bool needRunning, bool keep = false)
     {
         if (!Load()) return null;
         var utf8 = Encoding.UTF8.GetBytes(text + "\0");
         foreach (var (id, name) in backends)
         {
             IntPtr b = IntPtr.Zero;
+            var reused = keep && kept.TryGetValue(id, out b);
             try
             {
-                if (!prism_registry_exists(context, id)) continue;
-                b = prism_registry_acquire(context, id);
-                if (b == IntPtr.Zero) continue;
-                var init = prism_backend_initialize(b);           // fails for a reader that isn't running
-                if (init != Ok && init != AlreadyInitialized) continue;
+                if (!reused)
+                {
+                    if (!prism_registry_exists(context, id)) continue;
+                    b = prism_registry_acquire(context, id);
+                    if (b == IntPtr.Zero) continue;
+                    var init = prism_backend_initialize(b);           // fails for a reader that isn't running
+                    if (init != Ok && init != AlreadyInitialized) continue;
+                }
                 var features = prism_backend_get_features(b);
                 if (needRunning && (features & SupportedAtRuntime) == 0) continue;
                 var r = (features & SupportsOutput) != 0
                     ? prism_backend_output(b, utf8, interrupt)     // speech and braille
                     : prism_backend_speak(b, utf8, interrupt);
-                if (r == Ok) return name;
+                if (r == Ok)
+                {
+                    if (keep) { kept[id] = b; b = IntPtr.Zero; }   // stays open, still speaking
+                    return name;
+                }
             }
             catch (Exception)
             {
@@ -88,7 +102,11 @@ public static class Prism
             }
             finally
             {
-                if (b != IntPtr.Zero) { try { prism_backend_free(b); } catch (Exception) { } }
+                if (b != IntPtr.Zero)
+                {
+                    if (reused) kept.Remove(id);
+                    try { prism_backend_free(b); } catch (Exception) { }
+                }
             }
         }
         return null;
@@ -103,7 +121,7 @@ public static class Prism
 
     /// <summary>The Windows voice: OneCore, or SAPI where OneCore isn't there.</summary>
     public static string? ToWindowsVoice(string text, bool interrupt) =>
-        Try(new[] { (OneCore, "Windows voice"), (Sapi, "Windows voice (SAPI)") }, text, interrupt, needRunning: false);
+        Try(new[] { (OneCore, "Windows voice"), (Sapi, "Windows voice (SAPI)") }, text, interrupt, needRunning: false, keep: true);
 
     /// <summary>Which screen readers Prism finds running now, for the self-test and About.</summary>
     public static List<string> RunningReaders()

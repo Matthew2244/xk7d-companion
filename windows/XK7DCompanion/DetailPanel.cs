@@ -20,7 +20,8 @@ public sealed class DetailPanel : StackPanel
     TextBox? typedBox;
     TextBox? nameBox;
     bool choiceHasPlaceholder;
-    bool updating;
+    PickOnEnter? choicePicker;
+    int? choiceShownRaw;   // the session value the list was last set to show
 
     public DetailPanel(AppModel model)
     {
@@ -49,6 +50,7 @@ public sealed class DetailPanel : StackPanel
         Children.Clear();
         indexBoxes.Clear();
         choiceBox = null; slider = null; valueLabel = null; typedBox = null; nameBox = null; choiceHasPlaceholder = false;
+        choicePicker = null; choiceShownRaw = null;
         if (p is null)
         {
             Children.Add(Ui.Text("Select a setting in the list to see and change it.", wrap: true));
@@ -87,9 +89,15 @@ public sealed class DetailPanel : StackPanel
             case ValueType.Choices:
             {
                 choiceBox = new ComboBox { MinWidth = 240 }
-                    .Named(p.Name, $"Choosing a value sends it to the organ straight away. Alt Down Arrow opens the list to look without sending. {help}");
+                    .Named(p.Name, $"{ChoiceHelp} {help}");
                 foreach (var o in p.Kind.Options) choiceBox.Items.Add(o.Label);
-                choiceBox.SelectionChanged += (_, _) => ChoiceChanged();
+                var cb = choiceBox;
+                choicePicker = new PickOnEnter(cb, () => ChoiceIndexFor(model.Session.ValueOf(CurrentSetting!)), PickChoice, leaving =>
+                {
+                    var name = CurrentSetting?.SpokenName ?? p.Name;
+                    PutChoiceBack();
+                    model.Announcer.Announce(leaving ? $"{name}: nothing sent." : "Nothing sent.", force: true, polite: leaving);
+                });
                 Children.Add(Ui.Row(Ui.LabelFor($"{p.Name}:", choiceBox), choiceBox));
                 break;
             }
@@ -98,8 +106,10 @@ public sealed class DetailPanel : StackPanel
                 slider = new ValueSlider { Width = 300, VerticalAlignment = VerticalAlignment.Center }
                     .Named(p.Name, $"Arrow keys change the value by one step, Page Up and Page Down by ten percent, Home and End go to the ends. Each change is sent to the organ. {help}");
                 slider.OnCommit = Commit;
-                slider.OnUnknownStep = () => model.Announcer.Announce(
-                    "Not heard yet, so nothing was sent. Type a value below, or change it on the organ so the app hears it.", force: true);
+                var sl = slider;
+                slider.OnUnknownStep = () => model.Announcer.Announce(sl.OutOfRange is { } o
+                    ? $"The organ reported {p.Spoken(o)}, which is outside the manual's range, so nothing was sent. Type a value below."
+                    : "Not heard yet, so nothing was sent. Type a value below, or change it on the organ so the app hears it.", force: true);
                 slider.OnTyped = text =>
                 {
                     if (p.RawValueFromTyped(text) is not { } raw) return false;
@@ -127,6 +137,9 @@ public sealed class DetailPanel : StackPanel
         Children.Add(Ui.Reading(string.Join(Environment.NewLine, about), $"About {p.Name}"));
         RefreshValue();
     }
+
+    /// <summary>What a choice list does with the keys (also in Help and the README).</summary>
+    public const string ChoiceHelp = "Arrow keys move through the choices without sending. Press Enter to send the one you're on, or Escape to put back what was there. Alt Down Arrow opens the list.";
 
     static string EditorHelp(Parameter p) => p.Help.Length == 0 ? $"Range: {RangeText(p)}." : p.Help;
 
@@ -156,58 +169,76 @@ public sealed class DetailPanel : StackPanel
     public void RefreshValue()
     {
         if (parameter is not { } p || CurrentSetting is not { } s) return;
-        updating = true;
-        try
+        if (p.IsText)
         {
-            if (p.IsText)
-            {
-                if (nameBox is { } box && !box.IsKeyboardFocusWithin)
-                    box.Text = model.Session.TextOf(s) ?? "";
-                return;
-            }
-            var raw = model.Session.ValueOf(s);
-            if (choiceBox is { } cb)
-            {
-                var i = raw is { } r ? p.Kind.Options.ToList().FindIndex(o => o.Raw == r) : -1;
-                if (i >= 0)
-                {
-                    if (choiceHasPlaceholder) { cb.Items.RemoveAt(0); choiceHasPlaceholder = false; }
-                    if (cb.SelectedIndex != i) cb.SelectedIndex = i;
-                }
-                else if (!choiceHasPlaceholder)
-                {
-                    cb.Items.Insert(0, new ComboBoxItem { Content = "Not heard yet", IsEnabled = false });
-                    cb.SelectedIndex = 0;
-                    choiceHasPlaceholder = true;
-                }
-            }
-            if (slider is { } sl)
-            {
-                sl.Configure(p, raw);
-                if (valueLabel is { } vl) vl.Text = raw is { } v ? p.Display(v) : "Not heard yet";
-            }
+            if (nameBox is { } box && !box.IsKeyboardFocusWithin)
+                box.Text = model.Session.TextOf(s) ?? "";
+            return;
         }
-        finally { updating = false; }
+        var raw = model.Session.ValueOf(s);
+        // Someone arrowing through the list keeps their place unless the organ's value changed.
+        if (choiceBox is { } cb && !(choicePicker is { Pending: true } && raw == choiceShownRaw)) ShowChoice(cb, p, raw);
+        if (slider is { } sl)
+        {
+            sl.Configure(p, raw);
+            if (valueLabel is { } vl) vl.Text = raw is { } v ? p.Display(v) : "Not heard yet";
+        }
     }
 
-    void ChoiceChanged()
+    /// <summary>Show the session's value in the list. A value the organ hasn't reported, or one that
+    /// isn't among the choices, shows as an item that can't be picked.</summary>
+    void ShowChoice(ComboBox cb, Parameter p, int? raw)
     {
-        if (updating || choiceBox is not { } cb || parameter is not { } p) return;
-        var i = cb.SelectedIndex;
-        if (choiceHasPlaceholder)
+        choiceShownRaw = raw;
+        var i = raw is { } r ? p.Kind.Options.ToList().FindIndex(o => o.Raw == r) : -1;
+        if (i >= 0)
         {
-            if (i == 0) return;
-            // A real choice: the placeholder goes, quietly.
-            updating = true;
-            cb.Items.RemoveAt(0);
-            choiceHasPlaceholder = false;
-            i -= 1;
-            cb.SelectedIndex = i;
-            updating = false;
+            if (choiceHasPlaceholder) { cb.Items.RemoveAt(0); choiceHasPlaceholder = false; }
+            if (cb.SelectedIndex != i) cb.SelectedIndex = i;
+            return;
         }
-        if (i < 0 || i >= p.Kind.Options.Count) return;
-        Commit(p.Kind.Options[i].Raw);
+        var text = raw is { } u ? p.Display(u) : "Not heard yet";
+        if (!choiceHasPlaceholder)
+        {
+            cb.Items.Insert(0, new ComboBoxItem { Content = text, IsEnabled = false });
+            choiceHasPlaceholder = true;
+        }
+        else if (cb.Items[0] is ComboBoxItem placeholder) placeholder.Content = text;
+        cb.SelectedIndex = 0;
     }
+
+    /// <summary>The list item that shows this session value.</summary>
+    int ChoiceIndexFor(int? raw)
+    {
+        if (parameter is not { } p) return -1;
+        var i = raw is { } r ? p.Kind.Options.ToList().FindIndex(o => o.Raw == r) : -1;
+        return i >= 0 ? i + (choiceHasPlaceholder ? 1 : 0) : (choiceHasPlaceholder ? 0 : -1);
+    }
+
+    void PutChoiceBack()
+    {
+        if (choiceBox is not { } cb || parameter is not { } p || CurrentSetting is not { } s) return;
+        ShowChoice(cb, p, model.Session.ValueOf(s));
+    }
+
+    /// <summary>Enter, or a choice picked in the open list: send it and say what was sent.</summary>
+    void PickChoice(int index)
+    {
+        if (parameter is not { } p || CurrentSetting is not { } s) return;
+        var i = index - (choiceHasPlaceholder ? 1 : 0);
+        if (i < 0 || i >= p.Kind.Options.Count)
+        {
+            model.Announcer.Announce("Choose a value first. Nothing was sent.", force: true);
+            return;
+        }
+        var raw = p.Kind.Options[i].Raw;
+        Commit(raw);
+        PutChoiceBack();   // shows what the session now holds: the new value, or the old one if nothing went out
+        if (model.IsConnected) model.Announcer.Announce($"{s.SpokenName} sent: {p.Spoken(raw)}", force: true);
+    }
+
+    /// <summary>For the UI test: whether the choice list is showing something not yet sent.</summary>
+    public bool ChoicePending => choicePicker?.Pending ?? false;
 
     void TypedValue()
     {

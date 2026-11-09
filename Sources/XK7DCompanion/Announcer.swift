@@ -41,13 +41,14 @@ final class Announcer {
     var voiceOverRunning: Bool { NSWorkspace.shared.isVoiceOverEnabled }
 
     /// `force` speaks even when muted (for things the user asked for, like Repeat Last).
-    func announce(_ text: String, force: Bool = false) {
+    /// `polite` lets VoiceOver finish what it's saying first (the Windows version does the same).
+    func announce(_ text: String, force: Bool = false, polite: Bool = false) {
         onAnnounced?(text)
         if let sink = silentSink { sink(text); return }
         if muted && !force { return }
         switch effectiveMethod {
-        case .voiceOver: postToVoiceOver(text)
-        case .macVoice: speak(text)
+        case .voiceOver: postToVoiceOver(text, polite: polite)
+        case .macVoice: speak(text, polite: polite)
         case .automatic: break
         }
     }
@@ -63,17 +64,17 @@ final class Announcer {
         }
     }
 
-    private func postToVoiceOver(_ text: String) {
+    private func postToVoiceOver(_ text: String, polite: Bool) {
         let element: Any = NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) ?? NSApp as Any
         NSAccessibility.post(element: element, notification: .announcementRequested, userInfo: [
             .announcement: text,
-            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            .priority: (polite ? NSAccessibilityPriorityLevel.medium : .high).rawValue,
         ])
     }
 
-    private func speak(_ text: String) {
+    private func speak(_ text: String, polite: Bool) {
         // The latest value matters, not a queue of old ones.
-        if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
+        if synth.isSpeaking && !polite { synth.stopSpeaking(at: .immediate) }
         synth.speak(AVSpeechUtterance(string: text))
     }
 }
