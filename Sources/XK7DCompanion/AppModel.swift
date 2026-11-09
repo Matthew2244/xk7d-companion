@@ -303,8 +303,8 @@ final class AppModel {
 
     // MARK: Self-test (no speech, writes what would have been announced to a file)
 
-    func runSelfTest(logPath: String) {
-        var log: [String] = []
+    func runSelfTest(logPath: String, updaterLine: String) {
+        var log: [String] = [updaterLine]
         func write() { try? (log.joined(separator: "\n") + "\n").write(toFile: logPath, atomically: true, encoding: .utf8) }
         announcer.silentSink = { log.append("ANNOUNCE " + $0); write() }
         choose(.simulator, remember: false)

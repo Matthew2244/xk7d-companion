@@ -2,8 +2,8 @@
 # Proves the packaged app works on a Mac that never built it. 1.0.0 to 1.0.3 crashed at launch
 # everywhere but the build Mac: SwiftPM's Bundle.module fell back to this repo's .build folder.
 #   scripts/check-packaged.sh [path/to/App.app]
-# Fails if the binary names this machine's build folder, or if the app's silent self-test doesn't
-# finish while .build is out of reach. Launches in the background (open -g); speaks nothing.
+# Fails if the binary names this machine's build folder, if the app's silent self-test doesn't
+# finish while .build is out of reach, or if Sparkle doesn't load and start from inside the app. Launches in the background (open -g); speaks nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
@@ -35,6 +35,12 @@ pkill -f "$WORK/$NAME.app/Contents/MacOS/" 2>/dev/null || true
 restore; trap - EXIT
 if grep -q "SELFTEST DONE [1-9]" "$LOG" 2>/dev/null; then
   echo "OK: packaged app ran its self-test with .build out of reach ($(grep 'SELFTEST DONE' "$LOG"))"
+  if grep -q "^UPDATER ready https" "$LOG"; then
+    echo "OK: Sparkle loaded from inside the app and started ($(grep '^UPDATER' "$LOG"))"
+  else
+    echo "FAIL: Sparkle didn't start inside the packaged app:"; grep '^UPDATER' "$LOG" || echo "(no UPDATER line)"
+    exit 1
+  fi
 else
   echo "FAIL: packaged app did not finish its self-test without .build"; cat "$LOG" 2>/dev/null || echo "(no log; it probably crashed)"
   exit 1

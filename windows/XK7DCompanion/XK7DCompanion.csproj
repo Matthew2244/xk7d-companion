@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- XK-7D Companion for Windows (WPF). Builds on any system; runs on Windows 10 and 11.
+       windows/build.ps1 publishes it self-contained, adds Prism and WinSparkle, and makes the installer. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XK7D.Companion</RootNamespace>
+    <AssemblyName>XK7DCompanion</AssemblyName>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- One version number for both systems: the VERSION file at the top of the repository. -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../VERSION').Trim())</Version>
+    <Product>XK-7D Companion</Product>
+    <Company>Matthew Whitaker</Company>
+    <Copyright>Not made by or affiliated with Hammond.</Copyright>
+    <Description>XK-7D Companion</Description>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <!-- Test builds only (build.ps1 -TestFeed/-TestKey): a local update list and a throwaway key. -->
+  <ItemGroup Condition="'$(XK7DTestFeed)' != ''">
+    <AssemblyMetadata Include="XK7DTestFeed" Value="$(XK7DTestFeed)" />
+    <AssemblyMetadata Include="XK7DTestKey" Value="$(XK7DTestKey)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../XK7DCore/XK7DCore.csproj" />
+  </ItemGroup>
+</Project>

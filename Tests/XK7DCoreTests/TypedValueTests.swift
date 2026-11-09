@@ -63,6 +63,20 @@ final class TypedValueTests: XCTestCase {
         XCTAssertNil(rise.rawValue(fromTyped: "step 40"))
     }
 
+    /// 1.0.4 stopped (a Swift trap) when a number too big for Int was typed: "1e400" scans as
+    /// infinity, and 99999999999999999999 as 1e20.
+    func testHugeNumbersAreNotValuesAndDontStopTheApp() {
+        let level = p(Address(0x10, 0, 0, 0, 6))
+        let pan = p(Address(0, 0, 0, 0x30, 0x0A))
+        let rise = p(Address(0x42, 0, 0, 0, 2))
+        for typed in ["1e400", "-1e400", "99999999999999999999", "-99999999999999999999", "1e19"] {
+            XCTAssertNil(level.rawValue(fromTyped: typed), typed)
+            XCTAssertNil(pan.rawValue(fromTyped: typed), typed)
+            XCTAssertNil(pan.rawValue(fromTyped: "l" + typed), typed)
+            XCTAssertNil(rise.rawValue(fromTyped: "step " + typed), typed)
+        }
+    }
+
     func testEveryDisplayedValueTypesBackToItself() {
         // Whatever the app shows, typing it back must give the same raw value.
         var checked = 0

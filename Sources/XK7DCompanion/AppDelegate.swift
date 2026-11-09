@@ -9,6 +9,7 @@ enum AppIdentity {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     let model = AppModel()
+    let updater = AppUpdater()
     var mainWindow: MainWindowController!
     lazy var simulatorWindow = SimulatorWindowController(model: model)
     lazy var settingsWindow = SettingsWindowController(model: model)
@@ -32,9 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
         mainWindow = MainWindowController(model: model)
+        if let log = ProcessInfo.processInfo.environment["XK7D_UPDATE_TEST"] {
+            rehearseUpdate(logPath: log)
+            return
+        }
         if let log = ProcessInfo.processInfo.environment["XK7D_SELFTEST"] {
             // Silent self-test: no speech, no window, no Dock icon; results go to the log file.
-            model.runSelfTest(logPath: log)
+            let ready = updater.start()
+            model.runSelfTest(logPath: log, updaterLine: ready ? "UPDATER ready \(updater.feedURL ?? "no feed")" : "UPDATER not started")
             return
         }
         if ProcessInfo.processInfo.environment["XK7D_SILENT"] != nil {
@@ -43,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindow.showWindow(nil)
         mainWindow.window?.center()
         model.connectAtLaunch()
+        startUpdates()
         if let sim = ProcessInfo.processInfo.environment["XK7D_SHOW"] {
             if sim.contains("simulator") { simulatorWindow.showWindow(nil) }
             if sim.contains("settings") { settingsWindow.showWindow(nil) }
@@ -128,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         let help = NSMenu(title: "Help")
         help.addItem(item("\(name) Help", #selector(showHelp(_:)), "?", target: self))
+        help.addItem(item("Check for Updates…", #selector(checkForUpdates(_:)), "u", target: self))
         addSubmenu(help, to: main)
         NSApp.helpMenu = help
 
@@ -236,6 +244,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc func repeatLast(_ sender: Any?) { model.repeatLast() }
+
+    // MARK: Updates
+
+    /// What the background look found, waiting for a good moment to be said.
+    private var updateNotice: (version: String, text: String)?
+    private var noticeTimer: Timer?
+
+    private func startUpdates() {
+        guard updater.start() else { return }
+        updater.onFound = { [weak self] version in
+            guard let self else { return }
+            if UserDefaults.standard.string(forKey: "toldUpdateVersion") == version { return }
+            self.updateNotice = (version, "\(AppIdentity.name) \(version) is out. Help, Check for Updates shows what's new and installs it.")
+        }
+        updater.onSeenByPerson = { version in
+            UserDefaults.standard.set(version, forKey: "toldUpdateVersion")
+        }
+        updater.startLooking()
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.deliverUpdateNotice() }
+        RunLoop.main.add(t, forMode: .common)
+        noticeTimer = t
+    }
+
+    /// Say the update news once, only when this app is in front, nothing modal is open and
+    /// announcements aren't muted: never over a question someone is answering, never into
+    /// another app, never at a gig with announcements off.
+    private func deliverUpdateNotice() {
+        guard let notice = updateNotice, NSApp.isActive, NSApp.modalWindow == nil,
+              !NSApp.windows.contains(where: { $0.attachedSheet != nil }),
+              !model.announcer.muted else { return }
+        updateNotice = nil
+        UserDefaults.standard.set(notice.version, forKey: "toldUpdateVersion")
+        model.announcer.announce(notice.text)
+    }
+
+    @objc func checkForUpdates(_ sender: Any?) {
+        if !updater.checkWithWindow() {
+            model.announcer.announce("Updates aren't available in this copy of the app. Download the latest from github.com/Matthew2244/xk7d-companion.", force: true)
+        }
+    }
+
+    /// The update rehearsal (XK7D_UPDATE_TEST=log): no window, no speech. Checks the feed in the
+    /// app's Info.plist, downloads and verifies whatever is newer, then quits so Sparkle installs
+    /// it. Only a test build (scripts/build-app.sh with XK7D_TEST_FEED) lets Sparkle do this.
+    private func rehearseUpdate(logPath: String) {
+        model.announcer.silentSink = { _ in }
+        var lines: [String] = []
+        let write = { try? (lines.joined(separator: "\n") + "\n").write(toFile: logPath, atomically: true, encoding: .utf8) }
+        updater.log = { line in
+            lines.append(line); write()
+            if line.contains("will install") || line.contains("no update") || line.contains("failed") || line.contains("aborted") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { lines.append("REHEARSAL QUIT"); write(); NSApp.terminate(nil) }
+            }
+        }
+        guard updater.start() else { lines.append("UPDATER not started"); write(); NSApp.terminate(nil); return }
+        updater.rehearseSilentInstall()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 90) { lines.append("REHEARSAL TIMED OUT"); write(); NSApp.terminate(nil) }
+    }
     @objc func findSetting(_ sender: Any?) { showMain(nil); mainWindow.focusSearch() }
     @objc func goToList(_ sender: Any?) { showMain(nil); mainWindow.focusList() }
     @objc func showMain(_ sender: Any?) { mainWindow.showWindow(nil) }
@@ -260,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Browse or search every setting in the list. Each row shows its value; "not heard yet" means the organ has not reported it. Press Tab to reach the editor; changes are sent at once.
 
-        Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift U set up the organ, Command Shift M mute, Command Shift L repeat the last announcement, Command S save the last organ snapshot, Command 1 this window, Command 2 the simulator, Command comma settings.
+        Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift U set up the organ, Command Shift M mute, Command Shift L repeat the last announcement, Command S save the last organ snapshot, Command 1 this window, Command 2 the simulator, Command comma settings, Command U check for updates.
 
         To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx. Loading one of the organ's MIDI templates puts that back to NRPN, so run Set Up Organ again afterwards.
 

@@ -9,6 +9,10 @@ let package = Package(
         .library(name: "XK7DCoreMIDI", targets: ["XK7DCoreMIDI"]),
         .executable(name: "XK7DCompanion", targets: ["XK7DCompanion"]),
     ],
+    dependencies: [
+        // App updates on the Mac. Exact version: Sparkle's manifest pins its binary by checksum.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
+    ],
     targets: [
         // Parameter model, MIDI encode/decode, announcements, simulator. No UI, no CoreMIDI:
         // reusable on iPhone as is.
@@ -28,7 +32,7 @@ let package = Package(
         // The Mac app (AppKit).
         .executableTarget(
             name: "XK7DCompanion",
-            dependencies: ["XK7DCore", "XK7DCoreMIDI"],
+            dependencies: ["XK7DCore", "XK7DCoreMIDI", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

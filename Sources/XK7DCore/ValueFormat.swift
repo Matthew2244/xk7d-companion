@@ -112,6 +112,13 @@ public enum TextCodec {
 }
 
 extension Parameter {
+    /// A typed number as a whole number, or nil when it's far outside any range. Converting
+    /// infinity ("1e400") or 1e20 to Int would stop the app.
+    static func whole(_ d: Double) -> Int? {
+        guard d.isFinite, abs(d) < 1_000_000_000 else { return nil }
+        return Int(d)
+    }
+
     /// Turn what the user typed into a raw value, using the same mapping the display uses:
     /// "340 rpm", "+2", "-12.1 dB", "Random", "off", "3C" or "C3", "L10", "center", "step 12".
     public func rawValue(fromTyped text: String) -> Int? {
@@ -123,8 +130,9 @@ extension Parameter {
         case .steps(let lo, let hi, let low, let high):
             if t == low.lowercased() { return lo }
             if t == high.lowercased() { return hi }
-            guard let n = number(t.replacingOccurrences(of: "step", with: "").trimmingCharacters(in: .whitespaces)) else { return nil }
-            let raw = lo + Int(n)
+            guard let n = number(t.replacingOccurrences(of: "step", with: "").trimmingCharacters(in: .whitespaces)),
+                  let whole = Self.whole(n) else { return nil }
+            let raw = lo + whole
             return (lo...hi).contains(raw) ? raw : nil
         case .note(let lo, let hi):
             if let n = Int(t), (lo...hi).contains(n) { return n }
@@ -141,10 +149,10 @@ extension Parameter {
             if t == centerLabel.lowercased() || t == "center" || t == "centre" || t == "c" { return center }
             var raw: Int?
             if t.hasPrefix("l") || t.hasPrefix("left") || t.hasPrefix("d") || t.hasPrefix("dry"),
-               let n = number(t.trimmingCharacters(in: .letters.union(.whitespaces))) { raw = center - Int(n) }
+               let n = number(t.trimmingCharacters(in: .letters.union(.whitespaces))).flatMap(Self.whole) { raw = center - n }
             else if t.hasPrefix("r") || t.hasPrefix("right") || t.hasSuffix("v") || t.hasPrefix("vib"),
-                    let n = number(t.trimmingCharacters(in: .letters.union(.whitespaces))) { raw = center + Int(n) }
-            else if let n = number(t) { raw = center + Int(n) }
+                    let n = number(t.trimmingCharacters(in: .letters.union(.whitespaces))).flatMap(Self.whole) { raw = center + n }
+            else if let n = number(t).flatMap(Self.whole) { raw = center + n }
             return raw.flatMap { (lo...hi).contains($0) ? $0 : nil }
         default:
             break
@@ -156,8 +164,9 @@ extension Parameter {
                 return r
             }
             let numeric = t.replacingOccurrences(of: "±", with: "").replacingOccurrences(of: "+", with: "")
-            guard let v = Scanner(string: numeric).scanDouble() else { return nil }
-            let raw = Int(((v - origin) / step).rounded()) + zero
+            guard let v = Scanner(string: numeric).scanDouble(), let steps = Self.whole(((v - origin) / step).rounded())
+            else { return nil }
+            let raw = steps + zero
             if (lo...hi).contains(raw), special[raw] == nil { return raw }
             // A named value that is also a number, like "0 rpm" for a stopped rotor.
             if let (r, _) = special.first(where: { Scanner(string: $0.value).scanDouble() == v }) { return r }

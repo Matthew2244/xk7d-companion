@@ -1,0 +1,158 @@
+name: Test and build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # The C# core and its tests (the Swift tests ported, plus Tests/Vectors) on all three systems.
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test windows/XK7DCore.Tests -c Release --nologo
+
+  # The Swift core and app tests, including the check that Tests/Vectors matches the Swift core.
+  swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift test
+
+  # The Windows app: publish, packaged self-test, UI Automation check, installer, installed self-test.
+  windows:
+    needs: core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Inno Setup, for the installer
+        shell: pwsh
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build, self-test, UI Automation check, installer
+        shell: pwsh
+        run: windows/build.ps1 -SkipTests
+      - name: Install quietly, run the installed app's self-test, uninstall
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          $setup = "windows\dist\XK-7D-Companion-$v-Setup.exe"
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit $($p.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\XK-7D Companion"
+          if (-not (Test-Path "$app\XK7DCompanion.exe")) { throw "not installed where expected" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\XK-7D Companion.lnk")) { throw "no Start menu entry" }
+          $ver = (Get-Item "$app\XK7DCompanion.exe").VersionInfo.ProductVersion
+          if (-not $ver.StartsWith($v)) { throw "installed version $ver, expected $v" }
+          $env:XK7D_TEST_DIR = "$env:RUNNER_TEMP\installed-settings"
+          $t = Start-Process "$app\XK7DCompanion.exe" -ArgumentList '--self-test', "$env:RUNNER_TEMP\installed.log" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\installed.log"
+          if ($t.ExitCode -ne 0) { throw "installed self-test failed" }
+          if (-not (Select-String -Path "$env:RUNNER_TEMP\installed.log" -Pattern 'UPDATER WinSparkle started' -Quiet)) { throw "WinSparkle didn't start in the installed copy" }
+          $u = Get-ChildItem "$app\unins*.exe" | Select-Object -First 1
+          $p = Start-Process $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          Start-Sleep -Seconds 3
+          if (Test-Path "$app\XK7DCompanion.exe") { throw "uninstall left the app behind" }
+          "Installed $ver, self-tested and uninstalled cleanly."
+          (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() + "  " + (Split-Path $setup -Leaf) | Tee-Object -FilePath "windows\dist\SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: |
+            windows/dist/*-Setup.exe
+            windows/dist/SHA256SUMS.txt
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: windows/dist/*-Setup.exe
+
+  # A real WinSparkle update, start to finish, with a throwaway key made for this run (the real key
+  # never leaves Matthew's Mac): install test version A, serve a signed update list for B from
+  # 127.0.0.1, and check that a tampered signature is refused and a good one installs B.
+  update-rehearsal:
+    needs: core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Inno Setup, for the installer
+        shell: pwsh
+        run: if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Rehearse an update
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = "$env:RUNNER_TEMP\rehearsal"; $serve = "$work\serve"
+          New-Item -ItemType Directory -Force $serve | Out-Null
+          Invoke-WebRequest https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip -OutFile "$work\ws.zip"
+          if ((Get-FileHash "$work\ws.zip").Hash.ToLower() -ne '6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976') { throw "WinSparkle checksum" }
+          Expand-Archive "$work\ws.zip" "$work\ws"
+          $tool = "$work\ws\WinSparkle-0.9.4\bin\winsparkle-tool.exe"
+          $out = & $tool generate-key --file "$work\test.key" | Out-String
+          $key = ([regex]::Match($out, 'Public key: (\S+)')).Groups[1].Value
+          if (-not $key) { throw "no test key: $out" }
+          $feed = 'http://127.0.0.1:8765/appcast-windows.xml'
+          windows/build.ps1 -SkipTests -SkipUia -Version 1.1.0 -TestFeed $feed -TestKey $key -OutName test-a
+          windows/build.ps1 -SkipTests -SkipUia -Version 1.1.1 -TestFeed $feed -TestKey $key -OutName test-b
+          Copy-Item windows\dist\test-b.exe "$serve\test-b.exe"
+          function Appcast([string]$sig) {
+            @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel><title>XK-7D Companion</title><item><title>Version 1.1.1</title>
+              <sparkle:version>1.1.1</sparkle:version><sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+              <enclosure url="http://127.0.0.1:8765/test-b.exe" $sig type="application/octet-stream" sparkle:os="windows" sparkle:installerArguments="/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART /relaunch=1"/>
+            </item></channel></rss>
+          "@ | Set-Content "$serve\appcast-windows.xml" -Encoding utf8
+          }
+          $server = Start-Process python -ArgumentList '-m','http.server','8765','--bind','127.0.0.1','--directory',$serve -PassThru
+          Start-Sleep -Seconds 2
+          $p = Start-Process windows\dist\test-a.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "test A didn't install" }
+          $exe = "$env:LOCALAPPDATA\Programs\XK-7D Companion\XK7DCompanion.exe"
+          function Installed { (Get-Item $exe).VersionInfo.ProductVersion }
+          "Installed: $(Installed)"
+          $env:XK7D_TEST_DIR = "$work\settings"
+
+          # 1. A signature that doesn't match the download is refused: nothing installs.
+          $wrong = & $tool sign --private-key-file "$work\test.key" windows\dist\test-a.exe
+          $len = (Get-Item "$serve\test-b.exe").Length
+          Appcast (($wrong -replace 'length="\d+"', "length=`"$len`"").Trim())
+          $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
+          Start-Sleep -Seconds 60
+          if ((Installed) -notlike '1.1.0*') { throw "a tampered update was installed: $(Installed)" }
+          if (-not $a.HasExited) { Stop-Process -Id $a.Id -Force }
+          Get-Process -Name test-b -ErrorAction SilentlyContinue | Stop-Process -Force
+          "Refused a tampered update: still $(Installed)"
+
+          # 2. A good signature: WinSparkle downloads, verifies, closes the app and runs the installer.
+          $good = & $tool sign --private-key-file "$work\test.key" "$serve\test-b.exe"
+          Appcast $good.Trim()
+          $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
+          $deadline = (Get-Date).AddMinutes(4)
+          while ((Get-Date) -lt $deadline -and (Installed) -notlike '1.1.1*') { Start-Sleep -Seconds 3 }
+          $final = Installed
+          Get-Process -Name XK7DCompanion -ErrorAction SilentlyContinue | Stop-Process -Force
+          Stop-Process -Id $server.Id -Force
+          if ($final -notlike '1.1.1*') { throw "the update didn't install: still $final" }
+          "Updated through WinSparkle: 1.1.0 to $final"
+          $u = Get-ChildItem "$env:LOCALAPPDATA\Programs\XK-7D Companion\unins*.exe" | Select-Object -First 1
+          Start-Process $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Swift core's tests, ported one to one, plus the shared answers in Tests/Vectors. Runs on
+       Windows, Mac and Linux: dotnet test windows/XK7DCore.Tests -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>XK7D.Core.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../XK7DCore/XK7DCore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <None Include="../../Tests/Vectors/core-vectors.json" Link="core-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../Sources/XK7DCore/Resources/parameters.json" Link="parameters.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

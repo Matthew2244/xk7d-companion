@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows port of Sources/XK7DCore: no user interface, no MIDI API. It builds and its tests
+       run on any system (Windows, Mac, Linux), so the core can be checked without Windows. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XK7D.Core</RootNamespace>
+    <AssemblyName>XK7DCore</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The one parameter table, shared with the Mac app; compiled into the DLL so there's no file to lose. -->
+    <EmbeddedResource Include="../../Sources/XK7DCore/Resources/parameters.json" LogicalName="parameters.json" />
+  </ItemGroup>
+</Project>
