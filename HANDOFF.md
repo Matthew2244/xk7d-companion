@@ -66,8 +66,7 @@ Three C# projects in `windows/`, on .NET 10:
   The UI is built in code, no XAML.
 - **UiaCheck**: CI's check of the running app through UI Automation (see CI).
 
-**Why C# and WPF.** The best screen reader experience was the deciding
-point. WPF is built on UI Automation, which NVDA, JAWS and Narrator read, and
+**Why C# and WPF.** The screen reader experience decided it. WPF is built on UI Automation, which NVDA, JAWS and Narrator read, and
 its automation API is public, so what each control exposes can be set and
 then checked in CI. The slider is the case that mattered: it has to read
 "340 rpm" rather than a number or a percentage. In WinForms the classes that
@@ -111,8 +110,8 @@ messages until the simulator answers isn't needed there.
 **UI details worth keeping:**
 
 - The value slider (`ValueSlider` in `UiKit.cs`) offers UI Automation's
-  Value pattern only, holding the spoken value. It deliberately has no
-  RangeValue pattern, because NVDA reads a RangeValue slider as a percentage.
+  Value pattern only, holding the spoken value. It has no RangeValue
+  pattern, because NVDA reads a RangeValue slider as a percentage.
   Through Windows' bridge, MSAA (which JAWS leans on) reads the same name and
   value; UiaCheck checks both. Up and Right step up, as on the Mac (Windows'
   own trackbar has it the other way round). Setting the Value pattern from a
@@ -198,12 +197,12 @@ person saw there isn't announced again.
 **The update lists** are release assets, read from
 `releases/latest/download/appcast.xml` and `appcast-windows.xml`, as
 Wavelength's are. Those URLs redirect; Sparkle and WinSparkle follow
-redirects, and Wavelength's real updates have gone through them. The
-catch: every release must carry both lists, or updates break until it does.
+redirects, and Wavelength's real updates have gone through them. Every
+release must carry both lists, or updates break until it does.
 
 **No portable zip for Windows.** The installer needs no administrator
 password, and only an installed copy can update itself, so a zip would be
-a copy that quietly never updates.
+a copy that never updates.
 
 **Code signing on Windows:** there's no Windows code signing certificate
 (Wavelength has none either), so the installer and app are unsigned and
@@ -269,7 +268,7 @@ Sparkle's install path is the one rehearsed.
   `Tests/Vectors` is current.
 - **windows**: `windows/build.ps1` publishes the app, adds Prism and
   WinSparkle, runs the packaged app's self-test from a copy elsewhere, runs
-  UiaCheck, builds the installer; then the job installs it quietly, checks
+  UiaCheck, builds the installer; then the job installs it silently, checks
   the Start menu entry and version, runs the installed copy's self-test
   (which also starts WinSparkle), and uninstalls it. On a tag it attaches the
   installer to the release.
