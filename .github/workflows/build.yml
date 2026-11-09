@@ -113,6 +113,14 @@ jobs:
           windows/build.ps1 -SkipTests -SkipUia -Version 1.1.0 -TestFeed $feed -TestKey $key -OutName test-a
           windows/build.ps1 -SkipTests -SkipUia -Version 1.1.1 -TestFeed $feed -TestKey $key -OutName test-b
           Copy-Item windows\dist\test-b.exe "$serve\test-b.exe"
+          # winsparkle-tool prints the signature alone (or, with --verbose, with its attributes);
+          # either way, take the base64 and write the enclosure's attributes here.
+          function Sig([string]$signed, [string]$forLengthOf) {
+            $out = (& $tool sign --private-key-file "$work\test.key" $signed | Out-String)
+            $b64 = ([regex]::Match($out, '[A-Za-z0-9+/]{60,}={0,2}')).Value
+            if (-not $b64) { throw "no signature from winsparkle-tool: $out" }
+            "sparkle:edSignature=`"$b64`" length=`"$((Get-Item $forLengthOf).Length)`""
+          }
           function Appcast([string]$sig) {
             @"
           <?xml version="1.0" encoding="utf-8"?>
@@ -146,9 +154,8 @@ jobs:
           $env:XK7D_TEST_DIR = "$work\settings"
 
           # 1. A signature that doesn't match the download is refused: nothing installs.
-          $wrong = & $tool sign --private-key-file "$work\test.key" windows\dist\test-a.exe
-          $len = (Get-Item "$serve\test-b.exe").Length
-          Appcast (($wrong -replace 'length="\d+"', "length=`"$len`"").Trim())
+          Appcast (Sig windows\dist\test-a.exe "$serve\test-b.exe")
+          Get-Content "$serve\appcast-windows.xml"
           $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
           Start-Sleep -Seconds 45
           Screen 'tampered'
@@ -163,8 +170,7 @@ jobs:
 
           # 2. A good signature: WinSparkle downloads, verifies, closes the app and runs the installer.
           Remove-Item "$work\settings\rehearsal.log" -ErrorAction SilentlyContinue
-          $good = & $tool sign --private-key-file "$work\test.key" "$serve\test-b.exe"
-          Appcast $good.Trim()
+          Appcast (Sig "$serve\test-b.exe" "$serve\test-b.exe")
           $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
           $deadline = (Get-Date).AddMinutes(4)
           $shot = (Get-Date).AddSeconds(30)
