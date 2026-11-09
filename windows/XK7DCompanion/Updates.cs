@@ -31,6 +31,8 @@ public static class Updates
     const string Dll = "WinSparkle.dll";
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int CanShutdown();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void ShutdownRequest();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void Notice();
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)] delegate int RunInstaller(string path);
 
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_appcast_url([MarshalAs(UnmanagedType.LPStr)] string url);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int win_sparkle_set_eddsa_public_key([MarshalAs(UnmanagedType.LPStr)] string key);
@@ -39,6 +41,11 @@ public static class Updates
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_automatic_check_for_updates(int on);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_can_shutdown_callback(CanShutdown cb);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_shutdown_request_callback(ShutdownRequest cb);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_error_callback(Notice cb);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_did_find_update_callback(Notice cb);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_did_not_find_update_callback(Notice cb);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_update_cancelled_callback(Notice cb);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_set_user_run_installer_callback(RunInstaller cb);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_init();
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_check_update_with_ui();
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void win_sparkle_check_update_with_ui_and_install();
@@ -46,6 +53,10 @@ public static class Updates
 
     static CanShutdown? canShutdown;
     static ShutdownRequest? shutdownRequest;
+    static readonly List<Delegate> keep = new();
+
+    /// <summary>Test builds: a line for each WinSparkle step, for CI's update rehearsal.</summary>
+    public static Action<string>? Log { get; set; }
     static bool started;
 
     public static string Version => typeof(Updates).Assembly
@@ -73,6 +84,19 @@ public static class Updates
             win_sparkle_set_app_details("Matthew Whitaker", "XK-7D Companion", Version);
             win_sparkle_set_can_shutdown_callback(canShutdown);
             win_sparkle_set_shutdown_request_callback(shutdownRequest);
+            if (Log is { } log)
+            {
+                Notice N(string what) { Notice n = () => log(what); keep.Add(n); return n; }
+                win_sparkle_set_error_callback(N("WinSparkle error"));
+                win_sparkle_set_did_find_update_callback(N("WinSparkle found an update"));
+                win_sparkle_set_did_not_find_update_callback(N("WinSparkle found no update"));
+                win_sparkle_set_update_cancelled_callback(N("WinSparkle update cancelled"));
+                RunInstaller r = path => { log("WinSparkle downloaded and verified, running " + path); return 0; };
+                keep.Add(r);
+                win_sparkle_set_user_run_installer_callback(r);
+                shutdownRequest = () => { log("WinSparkle asked the app to close"); quit(); };
+                win_sparkle_set_shutdown_request_callback(shutdownRequest);
+            }
             // The app does the looking and says so; WinSparkle's window comes only when asked.
             win_sparkle_set_automatic_check_for_updates(0);
             win_sparkle_init();

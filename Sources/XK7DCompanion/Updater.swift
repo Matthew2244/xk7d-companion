@@ -75,6 +75,13 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
     /// builds set SUAllowsAutomaticUpdates to NO, which makes Sparkle ignore it.
     func rehearseSilentInstall() {
         guard let updater = controller?.updater else { log?("UPDATER not running"); return }
+        // A release build says SUAllowsAutomaticUpdates NO; there a background check would bring up
+        // Sparkle's window instead, so the rehearsal stops before checking anything.
+        guard Bundle.main.object(forInfoDictionaryKey: "SUAllowsAutomaticUpdates") == nil else {
+            log?("UPDATER not a test build; nothing checked"); return
+        }
+        // Sparkle allows silent downloads only while its automatic checks are on.
+        updater.automaticallyChecksForUpdates = true
         updater.automaticallyDownloadsUpdates = true
         log?("UPDATER checking \(updater.feedURL?.absoluteString ?? "no feed") from version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? "?")")
         updater.checkForUpdatesInBackground()
@@ -104,7 +111,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
         log?("UPDATER download failed: \(error.localizedDescription)")
     }
 
-    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) { log?("UPDATER extracted and verified \(item.displayVersionString)") }
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) { log?("UPDATER extracted \(item.displayVersionString)") }
 
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
                  immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {

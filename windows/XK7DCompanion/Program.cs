@@ -75,8 +75,16 @@ public static class Program
         {
             // CI's update rehearsal: WinSparkle checks the test feed, verifies the signature, closes
             // this app and runs the newer installer. Never in a release build (Updates.IsTestBuild).
+            var logPath = Path.Combine(AppSettings.Folder, "rehearsal.log");
+            Directory.CreateDirectory(AppSettings.Folder);
+            Updates.Log = line => { try { File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss} {line}\n"); } catch (Exception) { } };
+            Updates.Log($"rehearsal from {Updates.Version}, feed {Updates.AppcastUrl}");
             if (!Updates.Start(() => app.Dispatcher.BeginInvoke(() => { Quitting = true; app.Shutdown(); })) || !Updates.Rehearse())
+            {
+                Updates.Log("WinSparkle didn't start");
                 return 3;
+            }
+            Updates.Log("checking");
         }
         else if (uiTest)
         {

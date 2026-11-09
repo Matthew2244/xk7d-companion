@@ -123,7 +123,20 @@ jobs:
             </item></channel></rss>
           "@ | Set-Content "$serve\appcast-windows.xml" -Encoding utf8
           }
-          $server = Start-Process python -ArgumentList '-m','http.server','8765','--bind','127.0.0.1','--directory',$serve -PassThru
+          $server = Start-Process python -ArgumentList '-m','http.server','8765','--bind','127.0.0.1','--directory',$serve -PassThru -RedirectStandardError "$work\server.log" -RedirectStandardOutput "$work\server-out.log"
+          function Screen([string]$name) {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$work\$name.png")
+          }
+          function Report([string]$phase) {
+            "--- ${phase}: the app's rehearsal log"
+            Get-Content "$work\settings\rehearsal.log" -ErrorAction SilentlyContinue
+            "--- ${phase}: the test server"
+            Get-Content "$work\server.log" -ErrorAction SilentlyContinue
+          }
           Start-Sleep -Seconds 2
           $p = Start-Process windows\dist\test-a.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "test A didn't install" }
@@ -137,22 +150,39 @@ jobs:
           $len = (Get-Item "$serve\test-b.exe").Length
           Appcast (($wrong -replace 'length="\d+"', "length=`"$len`"").Trim())
           $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
-          Start-Sleep -Seconds 60
+          Start-Sleep -Seconds 45
+          Screen 'tampered'
+          Start-Sleep -Seconds 15
+          Report 'tampered'
+          if (-not (Select-String -Path "$work\server.log" -Pattern 'GET /test-b.exe' -Quiet)) { throw "WinSparkle never downloaded the update, so the refusal proves nothing" }
+          if (Select-String -Path "$work\settings\rehearsal.log" -Pattern 'running' -Quiet) { throw "WinSparkle ran a tampered installer" }
           if ((Installed) -notlike '1.1.0*') { throw "a tampered update was installed: $(Installed)" }
           if (-not $a.HasExited) { Stop-Process -Id $a.Id -Force }
           Get-Process -Name test-b -ErrorAction SilentlyContinue | Stop-Process -Force
           "Refused a tampered update: still $(Installed)"
 
           # 2. A good signature: WinSparkle downloads, verifies, closes the app and runs the installer.
+          Remove-Item "$work\settings\rehearsal.log" -ErrorAction SilentlyContinue
           $good = & $tool sign --private-key-file "$work\test.key" "$serve\test-b.exe"
           Appcast $good.Trim()
           $a = Start-Process $exe -ArgumentList '--update-rehearsal' -PassThru
           $deadline = (Get-Date).AddMinutes(4)
-          while ((Get-Date) -lt $deadline -and (Installed) -notlike '1.1.1*') { Start-Sleep -Seconds 3 }
+          $shot = (Get-Date).AddSeconds(30)
+          while ((Get-Date) -lt $deadline -and (Installed) -notlike '1.1.1*') {
+            Start-Sleep -Seconds 3
+            if ($shot -and (Get-Date) -gt $shot) { Screen 'good'; $shot = $null }
+          }
           $final = Installed
+          Report 'good'
           Get-Process -Name XK7DCompanion -ErrorAction SilentlyContinue | Stop-Process -Force
           Stop-Process -Id $server.Id -Force
           if ($final -notlike '1.1.1*') { throw "the update didn't install: still $final" }
           "Updated through WinSparkle: 1.1.0 to $final"
           $u = Get-ChildItem "$env:LOCALAPPDATA\Programs\XK-7D Companion\unins*.exe" | Select-Object -First 1
           Start-Process $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: update-rehearsal-screens
+          path: ${{ runner.temp }}/rehearsal/*.png
+          if-no-files-found: ignore

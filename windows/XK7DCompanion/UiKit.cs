@@ -230,3 +230,20 @@ public sealed class ValueSliderPeer : FrameworkElementAutomationPeer, IValueProv
         if (!slider.AcceptTyped(value)) throw new ArgumentException("Not a value for this setting.");
     }
 }
+
+/// <summary>A row of the settings list. Its template's expand toggle is drawing for the mouse; the
+/// row itself expands and collapses (Right and Left Arrow), so the toggle is left out of what screen
+/// readers see, where it would be an unnamed button inside every category.</summary>
+public sealed class Row : TreeViewItem
+{
+    protected override AutomationPeer OnCreateAutomationPeer() => new RowPeer(this);
+}
+
+public sealed class RowPeer : TreeViewItemAutomationPeer
+{
+    public RowPeer(Row owner) : base(owner) { }
+
+    protected override List<AutomationPeer>? GetChildrenCore() =>
+        base.GetChildrenCore()?.Where(p => !(p is FrameworkElementAutomationPeer f
+            && f.Owner is System.Windows.Controls.Primitives.ToggleButton { Name: "Expander" })).ToList();
+}

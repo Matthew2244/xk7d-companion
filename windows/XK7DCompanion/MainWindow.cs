@@ -215,16 +215,16 @@ public sealed class MainWindow : Window
         tree.Items.Clear();
         foreach (var (title, ps) in categories)
         {
-            var cat = new TreeViewItem { Header = $"{title}, {ps.Count} setting{(ps.Count == 1 ? "" : "s")}" };
+            var cat = new Row { Header = $"{title}, {ps.Count} setting{(ps.Count == 1 ? "" : "s")}" };
             cat.FontWeight = FontWeights.Bold;
-            foreach (var p in ps) cat.Items.Add(Row(p));
+            foreach (var p in ps) cat.Items.Add(RowFor(p));
             tree.Items.Add(cat);
         }
     }
 
-    TreeViewItem Row(Parameter p)
+    TreeViewItem RowFor(Parameter p)
     {
-        var item = new TreeViewItem { Tag = p, Header = RowText(p), FontWeight = FontWeights.Normal, ToolTip = p.Help.Length == 0 ? p.Name : p.Help };
+        var item = new Row { Tag = p, Header = RowText(p), FontWeight = FontWeights.Normal, ToolTip = p.Help.Length == 0 ? p.Name : p.Help };
         if (!rowsById.TryGetValue(p.Id, out var list)) rowsById[p.Id] = list = new List<TreeViewItem>();
         list.Add(item);
         // A row whose value changed while it had the focus is updated when the focus moves on, so the
@@ -293,7 +293,7 @@ public sealed class MainWindow : Window
         rowsById.Clear();
         staleRows.Clear();
         tree.Items.Clear();
-        foreach (var p in found) tree.Items.Add(Row(p));
+        foreach (var p in found) tree.Items.Add(RowFor(p));
         searchCount.Text = found.Count == 0 ? $"No settings match {q}." : $"{found.Count} setting{(found.Count == 1 ? "" : "s")} match {q}.";
     }
 

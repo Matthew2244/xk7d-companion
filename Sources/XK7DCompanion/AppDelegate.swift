@@ -294,7 +294,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let write = { try? (lines.joined(separator: "\n") + "\n").write(toFile: logPath, atomically: true, encoding: .utf8) }
         updater.log = { line in
             lines.append(line); write()
-            if line.contains("will install") || line.contains("no update") || line.contains("failed") || line.contains("aborted") {
+            if line.contains("will install") || line.contains("no update") || line.contains("failed") || line.contains("aborted")
+                || line.contains("not a test build") || line.contains("cycle ended") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { lines.append("REHEARSAL QUIT"); write(); NSApp.terminate(nil) }
             }
         }
