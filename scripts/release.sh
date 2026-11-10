@@ -77,6 +77,12 @@ python3 tools/appcast.py "$ZIP" "$VERSION" "$BASE/$ZIP_NAME" --notes "$WORK/note
 python3 tools/appcast.py "$WORK/$SETUP_NAME" "$VERSION" "$BASE/$SETUP_NAME" --notes "$WORK/notes.md" --windows > build/appcast-windows.xml
 gh release upload "$TAG" -R "$REPO" "$ZIP" build/appcast.xml build/appcast-windows.xml --clobber
 
+# Stable-named copies, so the README can link straight to the newest download
+# (releases/latest/download/<name>) without anyone opening the releases page.
+cp "$ZIP" "$WORK/${NAME// /-}-mac.zip"
+cp "$WORK/$SETUP_NAME" "$WORK/${NAME// /-}-Setup.exe"
+gh release upload "$TAG" -R "$REPO" "$WORK/${NAME// /-}-mac.zip" "$WORK/${NAME// /-}-Setup.exe" --clobber
+
 # Read it all back the way an installed copy will.
 LATEST="https://github.com/$REPO/releases/latest/download"
 curl -fsSL "$LATEST/appcast.xml" -o "$WORK/appcast.xml"

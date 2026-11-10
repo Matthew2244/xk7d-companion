@@ -22,14 +22,16 @@ It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
 
 ## Download
 
-Get the latest from the
-[releases page](https://github.com/Matthew2244/xk7d-companion/releases/latest).
+- **Mac:** [download XK-7D Companion for Mac](https://github.com/Matthew2244/xk7d-companion/releases/latest/download/XK-7D-Companion-mac.zip).
+  Unzip it and move XK-7D Companion to Applications. It needs macOS 14 or
+  later.
+- **Windows:** [download XK-7D Companion for Windows](https://github.com/Matthew2244/xk7d-companion/releases/latest/download/XK-7D-Companion-Setup.exe)
+  and run it. It installs for you only, so it doesn't ask for an
+  administrator password, and adds XK-7D Companion to the Start menu. It
+  needs 64-bit Windows 10 or 11.
 
-- **Mac:** `XK-7D-Companion-<version>.zip`. Unzip it and move XK-7D
-  Companion to Applications. It needs macOS 14 or later.
-- **Windows:** `XK-7D-Companion-<version>-Setup.exe`. It installs for you
-  only, so it doesn't ask for an administrator password, and adds XK-7D
-  Companion to the Start menu. It needs 64-bit Windows 10 or 11.
+Both links always get the newest version. Older versions are on the
+[releases page](https://github.com/Matthew2244/xk7d-companion/releases).
 
 The Windows installer isn't signed with a code signing certificate, so
 Windows may say "Windows protected your PC" the first time. Choose More info,
