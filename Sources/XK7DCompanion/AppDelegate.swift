@@ -321,19 +321,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let alert = NSAlert()
         alert.messageText = "\(AppIdentity.name) Help"
         alert.informativeText = """
-        Choose your organ in the Organ popup (it shows as XK-7 or similar over USB), or the built-in simulator.
+        There are two ways to use this app. Play the organ and the app says each change you make. Or change settings here, and they go straight to the organ. You can mix the two.
 
-        Changes you make on the organ are spoken, name first. A knob that is turning is spoken once it stops.
+        Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ popup. Then choose Organ, Set Up Organ for This App (Command Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that.
 
-        Browse or search every setting in the list. Each row shows its value; "not heard yet" means the organ has not reported it. Press Tab to reach the editor. A slider or a typed value is sent at once. A choice is sent when you pick it from the menu, and the app says what it sent.
+        Playing: changes are spoken name first, for example "Upper 8 foot: 6". A drawbar or knob is spoken once, when you stop moving it. When many settings change at once, such as calling up a patch, you hear the first and how many others changed. Command Shift L repeats the last announcement, and Command Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.
 
-        Keys: Command F search, Command L the settings list, Command R read from organ, Command Shift U set up the organ, Command Shift M mute, Command Shift L repeat the last announcement, Command S save the last organ snapshot, Command 1 this window, Command 2 the simulator, Command comma settings, Command U check for updates.
+        Command W hides this window and the app keeps listening. If VoiceOver goes quiet while the app is in the background, turn on the Mac voice option in Settings. Command 1 or the Dock icon brings the window back. The app never sends anything to the organ unless you change something here.
 
-        To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx. Loading one of the organ's MIDI templates puts that back to NRPN, so run Set Up Organ again afterwards.
+        Changing settings here: Command F searches, Command L goes to the list. Each row reads name and value; "not heard yet" means the organ hasn't reported it. Tab reaches the editor. A slider or typed value is sent at once. A choice is sent only when you pick it from the menu, and the app says what it sent.
 
-        If the organ is unplugged or turned off, the app says so, and connects again by itself when the organ comes back.
+        If the organ seems silent: check Set Up Organ has been sent since the last MIDI template, that the organ is chosen in the Organ popup, that the app isn't muted, and try with External Zones off.
 
-        Command W hides this window. The app keeps listening and speaking organ changes. Command 1 or the Dock icon brings it back. Command Q quits.
+        Other keys: Command R read from organ, Command S save the last organ snapshot, Command 2 the simulator, Command comma Settings, Command U check for updates, Command Q quit.
         """
         alert.runModal()
     }

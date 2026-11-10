@@ -491,14 +491,13 @@ public sealed class MainWindow : Window
     {
         Modal.Message(this, string.Join(Environment.NewLine + Environment.NewLine, new[]
         {
-            "Choose your organ in the Organ list (it shows as XK-7 or similar over USB), or the built-in simulator.",
-            "Changes you make on the organ are spoken, name first. A knob that is turning is spoken once it stops.",
-            "Browse or search every setting in the list. Each row shows its value; \"not heard yet\" means the organ has not reported it. Press Tab to reach the editor. A slider or a typed value is sent at once.",
-            "In a list of choices, such as Organ Type, the arrow keys move without sending anything. Press Enter to send the one you're on, and the app says what it sent. Escape puts back what was there. The Organ list works the same way: press Enter to connect.",
-            "Keys: Control F search, Control L the settings list, Control R read from organ, Control Shift U set up the organ, Control Shift M mute, Control Shift L repeat the last announcement, Control S save the last organ snapshot, Control 1 this window, Control 2 the simulator, Control comma settings, Control U check for updates, F1 this help.",
-            "To hear every setting, use Organ, Set Up Organ for This App, which sets the organ to send changes as SysEx. Loading one of the organ's MIDI templates puts that back to NRPN, so run Set Up Organ again afterwards.",
-            "If the organ is unplugged or turned off, the app says so, and connects again by itself when the organ comes back. If another program has the organ's MIDI port open, close it first.",
-            "Control W minimizes this window. The app keeps listening and speaking organ changes. Alt F4 quits.",
+            "There are two ways to use this app. Play the organ and the app says each change you make. Or change settings here, and they go straight to the organ. You can mix the two.",
+            "Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ list and press Enter. Then choose Organ, Set Up Organ for This App (Control Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that. If another program has the organ's MIDI port open, close it first.",
+            "Playing: changes are spoken name first, for example \"Upper 8 foot: 6\". A drawbar or knob is spoken once, when you stop moving it. When many settings change at once, such as calling up a patch, you hear the first and how many others changed. Control Shift L repeats the last announcement, and Control Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.",
+            "Control W minimizes this window and the app keeps listening. The app never sends anything to the organ unless you change something here.",
+            "Changing settings here: Control F searches, Control L goes to the list. Each row reads name and value; \"not heard yet\" means the organ hasn't reported it. Tab reaches the editor. A slider or typed value is sent at once. In a list of choices, such as Organ Type, the arrow keys move without sending anything. Press Enter to send the one you're on, and the app says what it sent. Escape puts back what was there.",
+            "If the organ seems silent: check Set Up Organ has been sent since the last MIDI template, that the organ is chosen in the Organ list, that the app isn't muted, and try with External Zones off.",
+            "Other keys: Control R read from organ, Control S save the last organ snapshot, Control 2 the simulator, Control comma Settings, Control U check for updates, F1 this help, Alt F4 quit.",
         }), "XK-7D Companion Help");
     }
 }
