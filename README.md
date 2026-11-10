@@ -1,22 +1,20 @@
 # XK-7D Companion
 
-An app for the Hammond XK-7D organ, made for players who use a screen
-reader. There's a Mac version for VoiceOver and a Windows version for NVDA,
-JAWS and Narrator. It speaks the changes you make on the organ. It also lets
-you see and change the settings the manual's MIDI tables list, from the
-keyboard.
+The Hammond XK-7D keeps most of its settings behind a small display. XK-7D
+Companion makes them usable with a screen reader. Play the organ and the app
+tells you what you changed. Sit at the computer and you can read and change
+those settings from the keyboard.
 
-The XK-7D's deeper settings live behind a small display. The Owner's Manual
-publishes a MIDI address for nearly every one of them, and this app is built
-on that map.
+There's a Mac version for VoiceOver and a Windows version for NVDA, JAWS and
+Narrator.
 
-**This app hasn't been tested with a real organ yet.** Everything follows the
-manual, and the manual has gaps and a few contradictions. Read
-[docs/PARAMETER-REVIEW.md](docs/PARAMETER-REVIEW.md) before relying on it.
+**It hasn't been tried on a real organ yet.** It follows the XK-7D Owner's
+Manual, which has gaps and a few contradictions.
+[docs/PARAMETER-REVIEW.md](docs/PARAMETER-REVIEW.md) lists every one.
 
 **The Windows version is new.** It's been built and tested on GitHub's
 Windows computers, through the same interface screen readers use. Nobody has
-tried it yet with NVDA, JAWS or Narrator on a real Windows PC.
+used it yet with NVDA, JAWS or Narrator on a real PC.
 
 It isn't made by, endorsed by or affiliated with Hammond or Suzuki.
 
@@ -37,57 +35,109 @@ The Windows installer isn't signed with a code signing certificate, so
 Windows may say "Windows protected your PC" the first time. Choose More info,
 then Run anyway.
 
-## What it does
+## Two ways to use it
 
-- **Speaks changes made on the organ.** For example "Leslie horn fast speed:
-  340 rpm", "Upper 8 foot: 6" or "Upper: patch F15". The setting's name comes
-  first. A knob you're turning is spoken once, when it stops. If lots of
-  settings change at once, as they might when you recall a patch, you hear
-  the first one and how many others changed.
-- **Lists the settings the manual gives a MIDI address for.** There are 537,
-  by category, with a search field. Each row reads "name: value", so you
-  don't have to select a setting to hear its value.
-- **Sends your changes to the organ.** Numbers use a slider, plus a box where
-  you can type the value the way the organ shows it, and each change is sent
-  straight away. Named choices, such as Organ Type, use a popup menu on the
-  Mac and a drop-down list on Windows. A choice is sent only when you pick it,
-  and the app says what it sent. See "Choosing from a list" below.
-- **Doesn't guess.** The organ can't be asked for one setting's value. Until
-  the organ reports a setting, or you set it from the app, it reads "not
-  heard yet". The slider won't move from the keyboard until then, because the
-  end of a range can be drastic (0 rpm stops the Leslie horn).
-- **Includes a simulator** of the XK-7D, clearly labelled, so you can try it
-  without an organ.
+**From the organ.** You play and make changes on the organ as you always
+would: drawbars, patches, the Leslie, the menus. The computer sits nearby
+with the app open and says each change out loud. You don't touch the
+computer at all.
 
-## Getting started
+**From the computer.** You look up any setting in the app's list, hear its
+value, and change it there. The change goes straight to the organ.
 
-1. Connect the organ to the computer with a USB cable and open the app. It
-   picks a MIDI port whose name contains XK-7, Hammond or Suzuki. If it
-   doesn't, pick the organ in the **Organ** list. If you plug the organ in
-   after opening the app, it connects when the organ shows up. If the cable
-   comes out or the organ is turned off, the app says "Organ disconnected",
-   and connects again when it's back.
-2. Choose **Organ > Set Up Organ for This App** (Command Shift U on the Mac,
-   Control Shift U on Windows). It offers four changes to the organ's MIDI
-   settings, each with a checkbox. Three are ticked. The fourth changes the
-   organ's Upper send channel and is off, since it can affect other MIDI
-   gear. If the organ sends on a different channel from the app, the app
-   tells you, and it's usually easier to change Upper channel in the app's
-   Settings. Nothing is sent until you choose Send to Organ. The one that
-   matters most is Individual Parameters set to SysEx. Without it, settings
-   that have no NRPN number (custom Leslie cabinets, custom tone wheels and
-   patch names, among others) are never sent by the organ. To keep these
-   settings after the organ is turned off, record the System settings on the
-   organ (manual page 142). Loading one of the organ's MIDI templates puts
-   Individual Parameters back to NRPN, so run Set Up Organ again after that.
-3. Play. Changes are spoken.
+You can mix the two. Whatever you change on the organ shows up in the app's
+list, and whatever you change in the app is sent to the organ.
 
-To change a setting from the computer, press Command F (Control F on
-Windows) and type part of its name, or press Command L (Control L) to go to
-the list. Right Arrow opens a category. Tab moves to the editor for the
-selected setting. In a slider, the arrow keys step by one. Page Up and Page
-Down move a tenth of the range. The screen reader reads the value as the
-organ's display shows it.
+## Setting up (once)
+
+1. **Connect the organ** to the computer with a USB cable and open the app.
+   It looks for a MIDI port named XK-7, Hammond or Suzuki. If it doesn't
+   find the organ, pick it in the **Organ** list. If the organ is plugged in or turned on later, the app
+   connects when it shows up. If the cable comes out or the organ is turned
+   off, the app says "Organ disconnected" and connects again when it's back.
+2. **Choose Organ > Set Up Organ for This App** (Command Shift U on the Mac,
+   Control Shift U on Windows). This step matters. Out of the box the organ
+   doesn't report every change, so without it some changes you make on the
+   organ are never spoken. The app offers four changes to the organ's MIDI
+   settings, each with a checkbox:
+   - Three are ticked. The important one sets Individual Parameters to
+     SysEx. That's what makes the organ report things like custom Leslie
+     cabinets, custom tone wheels and patch names.
+   - The fourth changes the organ's Upper send channel and is left unticked,
+     because it can affect other MIDI gear. If the organ sends on a
+     different channel from the app, the app tells you. It's usually easier
+     to change Upper channel in the app's Settings instead.
+
+   Nothing changes on the organ until you choose Send to Organ.
+3. **Save it on the organ.** To keep these settings after the organ is
+   turned off, record the System settings on the organ (manual page 142).
+   Loading one of the organ's MIDI templates undoes the important setting,
+   so run Set Up Organ again after that.
+
+## Playing with the app listening
+
+Once it's set up, just play. Some examples of what you'll hear:
+
+- Pull a drawbar: "Upper 8 foot: 6". The name comes first, then the value.
+- Change patches: "Upper: patch F15".
+- Change a Leslie setting in the menus: "Leslie horn fast speed: 340 rpm".
+
+A few things make it easier to follow while you play:
+
+- **A knob or drawbar you're moving is spoken once, when you stop.** You
+  hear where it ended up, not every step on the way. Settings has how long it
+  waits.
+- **When lots of settings change at once**, as they may when you call up a
+  patch, you hear the first one and how many others changed, not a list of
+  forty.
+- **The app doesn't need to be in front.** Command W (Control W on Windows)
+  puts the window away and the app keeps listening. It says "Window hidden.
+  Still listening." on the Mac and "Window minimized. Still listening." on
+  Windows.
+- **On the Mac, VoiceOver may not speak for an app that's in the
+  background.** If changes go quiet while you're in another app, turn on the
+  Settings option to use the Mac's voice while the app is in the background.
+  On Windows the screen reader speaks either way.
+- **Missed something?** Command Shift L (Control Shift L) repeats the last
+  announcement. Everything said so far is under Recent announcements, at the
+  bottom of the main window.
+- **Need quiet?** Command Shift M (Control Shift M) mutes and unmutes the
+  announcements. The app keeps listening and keeps its list up to date.
+
+The app only listens. It never sends anything to the organ unless you change
+something in the app or choose Set Up Organ.
+
+### If the organ seems silent
+
+- Check that Set Up Organ for This App has been sent since the last time a
+  MIDI template was loaded.
+- Check the organ is chosen in the Organ list. The app says "Organ
+  disconnected" if it lost the connection.
+- If External Zones are on, the organ may stop sending the Upper channel
+  (manual page 156). Try with them off.
+- On the Mac, see the background note above.
+- Check the app isn't muted (Command Shift M or Control Shift M).
+
+## Changing settings from the computer
+
+The app lists the 537 settings the manual gives a MIDI address for, sorted
+into categories, with a search field. Each row reads "name: value", so you
+hear the value without opening the setting.
+
+- Press Command F (Control F on Windows) and type part of a name, or
+  Command L (Control L) to go to the list. Right Arrow opens a category.
+- Tab moves to the editor for the selected setting.
+- **Numbers** use a slider. The arrow keys step by one, and Page Up and Page
+  Down move a tenth of the range. There's also a box where you can type the
+  value the way the organ's display shows it. Each change is sent straight
+  away.
+- **Named choices**, such as Organ Type, are sent only when you pick one. See
+  "Choosing from a list" below.
+
+**It doesn't guess.** The organ can't be asked for one setting's value, so a
+setting reads "not heard yet" until the organ reports it or you set it from
+the app. Until then the slider won't move from the keyboard, because the end
+of a range can be drastic: 0 rpm stops the Leslie horn.
 
 ### Choosing from a list
 
@@ -133,13 +183,6 @@ None of the Windows keys use Insert, Caps Lock or Control Alt, so they don't
 collide with NVDA, JAWS or Narrator commands, or with AltGr on European
 keyboards.
 
-Putting the main window away doesn't stop anything. The app says "Window
-hidden. Still listening." on the Mac and "Window minimized. Still
-listening." on Windows.
-
-Everything the app has spoken is listed under Recent announcements, at the
-bottom of the main window.
-
 ## Settings
 
 On the Mac, announcements can go through VoiceOver or the Mac's own voice.
@@ -164,7 +207,7 @@ doesn't match.
 
 Copies older than 1.1.0 can't update themselves. Download 1.1.0 once by hand.
 
-## The simulator
+## Trying it without an organ
 
 Choose Built-in simulator in the Organ list. If you quit while using it, the
 app opens on the simulator next time, unless the organ is plugged in. On the
