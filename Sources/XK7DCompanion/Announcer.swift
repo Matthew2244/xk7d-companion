@@ -31,6 +31,55 @@ final class Announcer {
         set { UserDefaults.standard.set(newValue, forKey: "macVoiceInBackground") }
     }
 
+    /// The Mac's voice: an identifier from `AVSpeechSynthesisVoice`, or empty for the system's
+    /// Spoken Content voice (System Settings, Accessibility, Spoken Content).
+    var voiceIdentifier: String {
+        get { UserDefaults.standard.string(forKey: "macVoiceIdentifier") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "macVoiceIdentifier") }
+    }
+
+    /// Speaking speed of the Mac's voice. 0 means the system's Spoken Content speed.
+    enum Speed: Int, CaseIterable {
+        case system = 0, slow, normal, fast, faster
+        var title: String {
+            switch self {
+            case .system: return "System speed"
+            case .slow: return "Slow"
+            case .normal: return "Normal"
+            case .fast: return "Fast"
+            case .faster: return "Very fast"
+            }
+        }
+        var rate: Float {
+            let d = AVSpeechUtteranceDefaultSpeechRate, top = AVSpeechUtteranceMaximumSpeechRate
+            switch self {
+            case .system, .normal: return d
+            case .slow: return d * 0.8
+            case .fast: return d + (top - d) * 0.25
+            case .faster: return d + (top - d) * 0.5
+            }
+        }
+    }
+    var speed: Speed {
+        get { Speed(rawValue: UserDefaults.standard.integer(forKey: "macVoiceSpeed")) ?? .system }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "macVoiceSpeed") }
+    }
+
+    /// Loudness of the Mac's voice, 25 to 100 percent.
+    var volumePercent: Int {
+        get { let v = UserDefaults.standard.integer(forKey: "macVoiceVolume"); return v == 0 ? 100 : min(max(v, 25), 100) }
+        set { UserDefaults.standard.set(min(max(newValue, 25), 100), forKey: "macVoiceVolume") }
+    }
+
+    /// Voices for the popup: the system voice first, then installed voices in the Mac's language.
+    static func voiceChoices() -> [(id: String, title: String)] {
+        let lang = String((Locale.preferredLanguages.first ?? "en").prefix(2))
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix(lang) }
+            .sorted { ($0.name, $0.language) < ($1.name, $1.language) }
+        return [("", "System voice")] + voices.map { ($0.identifier, "\($0.name) (\($0.language))") }
+    }
+
     /// Test and self-test hook: when set, nothing is spoken; text goes here instead.
     var silentSink: ((String) -> Void)?
     /// Every announcement, for the history list.
@@ -75,6 +124,16 @@ final class Announcer {
     private func speak(_ text: String, polite: Bool) {
         // The latest value matters, not a queue of old ones.
         if synth.isSpeaking && !polite { synth.stopSpeaking(at: .immediate) }
-        synth.speak(AVSpeechUtterance(string: text))
+        let u = AVSpeechUtterance(string: text)
+        let voice = voiceIdentifier.isEmpty ? nil : AVSpeechSynthesisVoice(identifier: voiceIdentifier)
+        // With neither chosen, the system's Spoken Content voice and speed are used.
+        u.prefersAssistiveTechnologySettings = voice == nil && speed == .system
+        if let voice { u.voice = voice }
+        if speed != .system { u.rate = speed.rate }
+        u.volume = Float(volumePercent) / 100
+        synth.speak(u)
     }
+
+    /// Say a sample in the chosen voice, speed and loudness (from Settings).
+    func sample() { speak("Upper: Dr. L.S., F00", polite: false) }
 }

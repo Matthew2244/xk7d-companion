@@ -198,7 +198,14 @@ public sealed class SimulatedOrgan
             _ => Array.Empty<(byte, int)>(),
         };
         if (plan.Length == 0) return;
+        // Invented layout: the Upper and Lower names first, side by side, then values. Only the
+        // names' being next to each other matters to the app (PatchNames.FromTemporaryDump).
         var stream = new List<byte>();
+        if (type == 0x07)
+        {
+            stream.AddRange(TextCodec.Encode(texts.TryGetValue(new Address(0, 0, 0x10, 0, 0), out var u) ? u : "", 16));
+            stream.AddRange(TextCodec.Encode(texts.TryGetValue(new Address(0, 0, 0x10, 0, 1), out var l) ? l : "", 16));
+        }
         foreach (var (addr, v) in values.OrderBy(kv => kv.Key))
         {
             stream.AddRange(addr.Bytes);
@@ -274,13 +281,37 @@ public sealed class SimulatedOrgan
     }
 
     /// <summary>Recall a patch from the panel: bank select and program change on the part's channel.</summary>
+    /// <summary>User patch names renamed in the simulator, by "Upper|n" or "Lower|n". Unrenamed User
+    /// patches carry the factory names, as the organ's do from new (p. 35).</summary>
+    public Dictionary<string, string> UserPatchNames { get; } = new();
+    /// <summary>Whether recalling a patch also sends its name as a Data Set (only in SysEx mode).</summary>
+    public bool SendsNameOnRecall { get; set; }
+
+    public string? PatchName(string part, int bankMsb, int program)
+    {
+        var column = part == "Upper" ? "Upper" : "Lower";
+        if (bankMsb == 0 && program >= 0 && program < 100)
+            return UserPatchNames.TryGetValue($"{column}|{program}", out var n) ? n : PatchNames.FactoryName(part, 1, program);
+        return PatchNames.FactoryName(part, bankMsb, program);
+    }
+
     public void SelectPatch(string part, int bankMsb, int program)
     {
+        var nameAddress = new Address(0, 0, 0x10, 0, part == "Upper" ? (byte)0 : (byte)1);
+        if (PatchName(part, bankMsb, program) is { } name)
+        {
+            // The organ's own character set is unknown; the footage mark goes as an apostrophe here.
+            var ascii = name.Replace("\u00B4", "'", StringComparison.Ordinal);
+            texts[nameAddress] = TextCodec.Decode(TextCodec.Encode(ascii, 16));
+            OnChange?.Invoke($"{part} patch name is now {name}");
+        }
         if (!TransmitsProgramChange) return;
         var ch = part == "Lower" ? LowerChannel : part == "Pedal" ? PedalChannel : UpperChannel;
         Transmit(new MidiMessage.ControlChange(ch, 0, bankMsb).Bytes);
         Transmit(new MidiMessage.ControlChange(ch, 32, 0).Bytes);
         Transmit(new MidiMessage.ProgramChange(ch, program).Bytes);
+        if (SendsNameOnRecall && IndividualMode == IndividualMode.Sysex && Database.SettingAt(nameAddress) is { } s)
+            Transmit(XK7SysEx.DataSet(DeviceId, s, texts.TryGetValue(nameAddress, out var t) ? t : ""));
     }
 
     /// <summary>The raw values a knob passes through when turned from its current value to target.</summary>

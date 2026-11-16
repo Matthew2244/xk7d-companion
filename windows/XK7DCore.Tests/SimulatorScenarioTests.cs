@@ -86,7 +86,12 @@ public class SimulatorScenarioTests
         organ.PanelChange(S(A(0, 0, 1, 1, 2)), 6);
         Assert.True(WaitUntil(() => spoken.Contains("Upper 8 foot: 6")), string.Join(" | ", spoken));
         organ.SelectPatch("Lower", 1, 15);
-        Assert.True(WaitUntil(() => spoken.Contains("Lower: patch F15")), string.Join(" | ", spoken));
+        Assert.True(WaitUntil(() => spoken.Contains("Lower: Kinda Brian, F15")), string.Join(" | ", spoken));
+        // A User patch: the name comes back in a Temporary dump the app asks for.
+        organ.UserPatchNames["Upper|7"] = "Jazz Lead";
+        organ.SelectPatch("Upper", 0, 7);
+        Assert.True(WaitUntil(() => spoken.Contains("Upper: Jazz Lead, U07")), string.Join(" | ", spoken));
+        Assert.Equal(OrganSession.NameDumpStates.Works, session.NameDumpState);
 
         // 7. Our own change coming straight back is not re-announced.
         spoken.Clear();
@@ -99,10 +104,11 @@ public class SimulatorScenarioTests
         Assert.Equal(5, session.ValueOf(reverb));
 
         // 8. Memory dump: 6 + 11 packets, checksums good, every packet acknowledged.
+        var acksBefore = organ.Acknowledgements;   // the name lookup's dump in step 6 was acknowledged too
         session.RequestDump(DumpType.Temporary);
         Assert.True(WaitUntil(() => (session.CurrentDump?.Count ?? 0) == 17));
         Assert.True(session.CurrentDump!.AllChecksumsOK);
-        Assert.True(WaitUntil(() => organ.Acknowledgements == 17));
+        Assert.True(WaitUntil(() => organ.Acknowledgements == acksBefore + 17));
         var snap = session.FinishDump()!;
         Assert.Equal(6, snap.Packets.Count(p => p.Type == 7));
         Assert.Equal(11, snap.Packets.Count(p => p.Type == 8));

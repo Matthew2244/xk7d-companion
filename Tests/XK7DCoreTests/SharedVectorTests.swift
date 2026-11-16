@@ -126,6 +126,60 @@ enum CoreVectors {
             patches.append(json([bank, names, names.map(PatchSelect.spoken)] as [Any]))
         }
 
+        // Patch names: the factory table, the spoken line, names read out of dumps.
+        let factory = (0..<100).map { [PatchNames.factoryUpper[$0], PatchNames.factoryLower[$0],
+                                       PatchNames.spoken(PatchNames.factoryUpper[$0]), PatchNames.spoken(PatchNames.factoryLower[$0])] }
+        var announcements: [[String]] = []
+        for part in ["Upper", "Lower", "Pedal"] {
+            for (bank, program) in [(1, 0), (1, 21), (1, 99), (0, 5), (0x65, 0x69), (nil, 0x7E), (2, 3)] as [(Int?, Int)] {
+                let desc = PatchSelect.describe(bank: bank, program: program)
+                let factoryName = PatchNames.factoryName(part: part, bank: bank, program: program) ?? ""
+                announcements.append([part, desc, factoryName, PatchNames.isLookupSlot(bank: bank, program: program) ? "lookup" : "",
+                                      PatchNames.announcement(part: part, description: desc, name: nil),
+                                      PatchNames.announcement(part: part, description: desc, name: "Jazz 8\u{B4} Lead")])
+            }
+        }
+        func dumpStream(_ names: String, at offset: Int, fill: UInt8) -> [UInt8] {
+            var b = [UInt8](repeating: fill, count: 120)
+            for (i, c) in Array(names.utf8).enumerated() where offset + i < b.count { b[offset + i] = c }
+            return b
+        }
+        let dumpCases: [[UInt8]] = [
+            dumpStream("Dr. L.S.       UDr. L.S.       L", at: 10, fill: 0),
+            dumpStream("Jazz Lead       Bass            ", at: 0, fill: 0),
+            dumpStream("Jazz Lead                       ", at: 50, fill: 0),
+            dumpStream("Ab              x               ", at: 3, fill: 0),
+            dumpStream("A               b               ", at: 3, fill: 0),
+            dumpStream("", at: 0, fill: 0x40),
+            dumpStream("12345678901234567890123456789012", at: 0, fill: 0),
+            dumpStream("Jazz Lead       Bass Line       ", at: 0, fill: 0x41),
+            Array(TextCodec.encode("Short").prefix(5)),
+        ]
+        let dumps = dumpCases.map { d -> [Any] in
+            let r = PatchNames.fromTemporaryDump(d)
+            return [hex(d), r.map { [$0.upper, $0.lower] as Any } ?? NSNull()]
+        }
+        let cleanInputs = ["  Jazz    Lead  ", "Dr. L.S.       U", "A  L", "Organ  L", "\u{0}x\u{0}", ""]
+        let cleaned = cleanInputs.map { [$0, PatchNames.clean($0)] }
+        // The spoken line for every setting at its lowest and highest value.
+        var lines: [[Any]] = []
+        for p in db.parameters where !p.isText {
+            let st = Setting(p, indexValues: p.indices.map { $0.options.first!.raw })
+            lines.append([p.id, OrganSession.line(st, raw: p.rawRange.lowerBound), OrganSession.line(st, raw: p.rawRange.upperBound)])
+        }
+        // The MIDI log for a stream of mixed messages, in both directions.
+        let logStream: [UInt8] = [0xB0, 0x00, 0x00, 0xB0, 0x20, 0x00, 0xC0, 0x05, 0x90, 60, 100, 0x80, 60, 0, 0xFE,
+                                  0xB0, 0x0B, 0x40, 0xB0, 0x0E, 0x60, 0xB0, 0x63, 0x12, 0xB0, 0x62, 0x0A, 0xB0, 0x06, 0x01]
+            + XK7SysEx.dumpRequest(device: 0, type: .temporary)
+            + XK7SysEx.dataSet(device: 0, setting: db.setting(at: Address(0, 0, 0x10, 0, 0))!, text: "Gospel")
+            + XK7SysEx.dataPacket(device: 0, type: 7, packet: 2, data64: [UInt8](repeating: 0x41, count: 64))
+            + XK7SysEx.acknowledge(device: 0, type: 7, result: 0, packet: 2)
+            + XK7SysEx.identityRequest(device: 0x7F) + XK7SysEx.identityReply(device: 3)
+            + [0xF0, 0x55, 0x00, 0x10, 0x26, 0x02, 0x02, 0xF7, 0xF0, 0x01, 0x02, 0xF7, 0xB2, 92, 127, 0xE0, 0, 64, 0xB1, 1, 30]
+        let logger = MIDILogger(database: db)
+        let logLines = logger.lines(incoming: true, Array(logStream.prefix(13))) + logger.lines(incoming: true, Array(logStream.dropFirst(13)))
+            + logger.lines(incoming: false, logStream)
+
         let notes = (0..<128).map { [NoteName.display($0), NoteName.spoken($0)] }
         let drawbars = (0..<128).map { DrawbarCC.level(forValue: $0) }
         let drawbarValues = (0...8).map { DrawbarCC.value(forLevel: $0) }
@@ -143,6 +197,14 @@ enum CoreVectors {
          "texts": \(json(texts)),
          "patches": [
         \(patches.joined(separator: ",\n"))
+         ],
+         "factoryPatchNames": \(json(factory)),
+         "patchAnnouncements": \(json(announcements)),
+         "dumpNames": \(json(dumps)),
+         "cleanNames": \(json(cleaned)),
+         "midiLog": \(json(logLines)),
+         "lines": [
+        \(lines.map(json).joined(separator: ",\n"))
          ],
          "nrpn": [
         \(nrpn.joined(separator: ",\n"))

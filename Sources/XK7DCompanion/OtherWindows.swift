@@ -126,6 +126,13 @@ final class SettingsWindowController: NSWindowController {
     let model: AppModel
     private let methodPopup = NSPopUpButton()
     private let backgroundCheckbox = NSButton(checkboxWithTitle: "Use the Mac's voice while this app is in the background", target: nil, action: nil)
+    private let voicePopup = NSPopUpButton()
+    private let speedPopup = NSPopUpButton()
+    private let volumePopup = NSPopUpButton()
+    private let sampleButton = NSButton(title: "Say a Sample", target: nil, action: nil)
+    private let namesCheckbox = NSButton(checkboxWithTitle: "Ask the organ for User patch names", target: nil, action: nil)
+    private var voices: [(id: String, title: String)] = []
+    private static let volumes = [100, 75, 50, 25]
     private let settleField = NSTextField(string: "")
     private let settleStepper = NSStepper()
     private let deviceField = NSTextField(string: "")
@@ -134,7 +141,7 @@ final class SettingsWindowController: NSWindowController {
 
     init(model: AppModel) {
         self.model = model
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 580),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "\(AppIdentity.name) Settings"
         super.init(window: w)
@@ -170,6 +177,22 @@ final class SettingsWindowController: NSWindowController {
         help(backgroundCheckbox, "Use the Mac's voice while this app is in the background",
              "Try this if VoiceOver does not speak organ changes while you are in another app.")
 
+        voices = Announcer.voiceChoices()
+        voicePopup.addItems(withTitles: voices.map(\.title))
+        voicePopup.target = self; voicePopup.action = #selector(changed)
+        help(voicePopup, "Voice", "The Mac's voice for announcements when VoiceOver isn't speaking them. System voice follows System Settings, Accessibility, Spoken Content.")
+        speedPopup.addItems(withTitles: Announcer.Speed.allCases.map(\.title))
+        speedPopup.target = self; speedPopup.action = #selector(changed)
+        help(speedPopup, "Speed", "How fast the Mac's voice speaks. System speed follows Spoken Content when the voice is System voice.")
+        volumePopup.addItems(withTitles: Self.volumes.map { "\($0) percent" })
+        volumePopup.target = self; volumePopup.action = #selector(changed)
+        help(volumePopup, "Loudness", "How loud the Mac's voice is, compared with other sound. VoiceOver keeps its own volume.")
+        sampleButton.target = self; sampleButton.action = #selector(saySample)
+        help(sampleButton, "Say a Sample", "Says a patch change in the chosen voice, speed and loudness.")
+        namesCheckbox.target = self; namesCheckbox.action = #selector(changed)
+        help(namesCheckbox, "Ask the organ for User patch names",
+             "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.")
+
         let settle = Int(model.session.coalescer.settle * 1000)
         settleStepper.minValue = 100; settleStepper.maxValue = 2000; settleStepper.increment = 50
         settleStepper.integerValue = settle
@@ -193,7 +216,10 @@ final class SettingsWindowController: NSWindowController {
             makeLabel("Announcements", bold: true),
             hrow(makeLabel("Speak with:"), methodPopup),
             backgroundCheckbox,
+            hrow(makeLabel("Voice:"), voicePopup),
+            hrow(makeLabel("Speed:"), speedPopup, makeLabel("Loudness:"), volumePopup, sampleButton),
             hrow(makeLabel("Wait before speaking, milliseconds:"), settleField, settleStepper),
+            namesCheckbox,
             makeLabel("MIDI", bold: true),
             hrow(makeLabel("Organ device ID:"), deviceField, deviceStepper),
         ]
@@ -233,6 +259,10 @@ final class SettingsWindowController: NSWindowController {
     func reload() {
         methodPopup.selectItem(at: Announcer.Method.allCases.firstIndex(of: model.announcer.method) ?? 0)
         backgroundCheckbox.state = model.announcer.macVoiceInBackground ? .on : .off
+        voicePopup.selectItem(at: voices.firstIndex { $0.id == model.announcer.voiceIdentifier } ?? 0)
+        speedPopup.selectItem(at: Announcer.Speed.allCases.firstIndex(of: model.announcer.speed) ?? 0)
+        volumePopup.selectItem(at: Self.volumes.firstIndex(of: model.announcer.volumePercent) ?? 0)
+        namesCheckbox.state = model.session.askOrganForPatchNames ? .on : .off
         let settle = Int((model.session.coalescer.settle * 1000).rounded())
         settleStepper.integerValue = settle
         settleField.integerValue = settle
@@ -248,6 +278,11 @@ final class SettingsWindowController: NSWindowController {
         return r
     }
 
+    @objc private func saySample() {
+        changed()
+        model.announcer.sample()
+    }
+
     @objc private func stepperChanged() {
         settleField.integerValue = settleStepper.integerValue
         deviceField.integerValue = deviceStepper.integerValue
@@ -257,6 +292,11 @@ final class SettingsWindowController: NSWindowController {
     @objc private func changed() {
         model.announcer.method = Announcer.Method.allCases[max(methodPopup.indexOfSelectedItem, 0)]
         model.announcer.macVoiceInBackground = backgroundCheckbox.state == .on
+        if voices.indices.contains(voicePopup.indexOfSelectedItem) { model.announcer.voiceIdentifier = voices[voicePopup.indexOfSelectedItem].id }
+        model.announcer.speed = Announcer.Speed.allCases[max(speedPopup.indexOfSelectedItem, 0)]
+        model.announcer.volumePercent = Self.volumes[max(volumePopup.indexOfSelectedItem, 0)]
+        model.session.askOrganForPatchNames = namesCheckbox.state == .on
+        UserDefaults.standard.set(model.session.askOrganForPatchNames, forKey: "askOrganForPatchNames")
         let settle = min(max(settleField.integerValue, 100), 2000)
         settleStepper.integerValue = settle
         model.session.coalescer.settle = Double(settle) / 1000

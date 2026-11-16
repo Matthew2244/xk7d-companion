@@ -5,6 +5,7 @@ import XK7DCore
 /// The app's name lives here and nowhere else in the Swift code (the build script reads it too).
 enum AppIdentity {
     static let name = "XK-7D Companion"
+    static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development" }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
@@ -136,6 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let help = NSMenu(title: "Help")
         help.addItem(item("\(name) Help", #selector(showHelp(_:)), "?", target: self))
         help.addItem(item("Check for Updates…", #selector(checkForUpdates(_:)), "u", target: self))
+        help.addItem(.separator())
+        help.addItem(item("Keep a MIDI Log", #selector(toggleMIDILog(_:)), "", target: self))
+        help.addItem(item("Show MIDI Log in Finder", #selector(showMIDILog(_:)), "", target: self))
         addSubmenu(help, to: main)
         NSApp.helpMenu = help
 
@@ -153,6 +157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(toggleMute(_:)):
             menuItem.title = model.announcer.muted ? "Unmute Announcements" : "Mute Announcements"
             return true
+        case #selector(toggleMIDILog(_:)):
+            menuItem.state = model.midiLog.isOn ? .on : .off
+            return true
+        case #selector(showMIDILog(_:)):
+            return FileManager.default.fileExists(atPath: MIDILogFile.file.path)
         case #selector(saveSnapshot(_:)): return model.snapshot != nil
         case #selector(disconnect(_:)): return model.choice != .none
         default: return true
@@ -245,6 +254,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func repeatLast(_ sender: Any?) { model.repeatLast() }
 
+    @objc func toggleMIDILog(_ sender: Any?) {
+        model.midiLog.isOn.toggle()
+        model.announcer.announce(model.midiLog.isOn
+            ? "MIDI log on. Help, Show MIDI Log in Finder finds the file."
+            : "MIDI log off.", force: true)
+    }
+
+    @objc func showMIDILog(_ sender: Any?) {
+        NSWorkspace.shared.activateFileViewerSelecting([MIDILogFile.file])
+    }
+
     // MARK: Updates
 
     /// What the background look found, waiting for a good moment to be said.
@@ -325,15 +345,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ popup. Then choose Organ, Set Up Organ for This App (Command Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that.
 
-        Playing: changes are spoken name first, for example "Upper 8 foot: 6". A drawbar or knob is spoken once, when you stop moving it. When many settings change at once, such as calling up a patch, you hear the first and how many others changed. Command Shift L repeats the last announcement, and Command Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.
+        Playing: changes are spoken name first, for example "Upper 8 foot: 6". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: "Upper: Kinda Brian, F15". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Command Shift L repeats the last announcement, and Command Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.
 
-        Command W hides this window and the app keeps listening. If VoiceOver goes quiet while the app is in the background, turn on the Mac voice option in Settings. Command 1 or the Dock icon brings the window back. The app never sends anything to the organ unless you change something here.
+        Command W hides this window and the app keeps listening. If VoiceOver goes quiet while the app is in the background, turn on the Mac voice option in Settings. Command 1 or the Dock icon brings the window back. The app sends nothing to the organ unless you change something here, apart from asking for a User patch's name.
+
+        Speech: with VoiceOver on, the app speaks through VoiceOver. Without it, it uses the Mac's voice; Settings has the voice, speed and loudness, and Command Shift M mutes.
 
         Changing settings here: Command F searches, Command L goes to the list. Each row reads name and value; "not heard yet" means the organ hasn't reported it. Tab reaches the editor. A slider or typed value is sent at once. A choice is sent only when you pick it from the menu, and the app says what it sent.
 
         If the organ seems silent: check Set Up Organ has been sent since the last MIDI template, that the organ is chosen in the Organ popup, that the app isn't muted, and try with External Zones off.
 
         Other keys: Command R read from organ, Command S save the last organ snapshot, Command 2 the simulator, Command comma Settings, Command U check for updates, Command Q quit.
+
+        MIDI log: Help, Keep a MIDI Log writes everything sent to and from the organ to a file (notes and the expression pedal are only counted). Help, Show MIDI Log in Finder finds it, to send to the developer.
         """
         alert.runModal()
     }

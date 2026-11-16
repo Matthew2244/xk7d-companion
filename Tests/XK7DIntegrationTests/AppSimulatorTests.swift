@@ -74,7 +74,12 @@ class SimulatorScenario: XCTestCase {
         organ.panelChange(setting(Address(0, 0, 1, 1, 2)), raw: 6)
         XCTAssertTrue(waitUntil { self.spoken.contains("Upper 8 foot: 6") }, "spoken: \(spoken)")
         organ.selectPatch(part: "Lower", bankMSB: 1, program: 15)
-        XCTAssertTrue(waitUntil { self.spoken.contains("Lower: patch F15") }, "spoken: \(spoken)")
+        XCTAssertTrue(waitUntil { self.spoken.contains("Lower: Kinda Brian, F15") }, "spoken: \(spoken)")
+        // A User patch: the name comes back in a Temporary dump the app asks for.
+        organ.userPatchNames["Upper|7"] = "Jazz Lead"
+        organ.selectPatch(part: "Upper", bankMSB: 0, program: 7)
+        XCTAssertTrue(waitUntil { self.spoken.contains("Upper: Jazz Lead, U07") }, "spoken: \(spoken)")
+        XCTAssertEqual(session.nameDumpState, .works)
 
         // 7. Our own change coming straight back is not re-announced.
         spoken.removeAll()
@@ -87,10 +92,11 @@ class SimulatorScenario: XCTestCase {
         XCTAssertEqual(session.value(of: reverb), 5)
 
         // 8. Memory dump: 6 + 11 packets, checksums good, every packet acknowledged.
+        let acksBefore = organ.acknowledgements    // the name lookup's dump in step 6 was acknowledged too
         session.requestDump(.temporary)
         XCTAssertTrue(waitUntil { (self.session.currentDump?.count ?? 0) == 17 })
         XCTAssertTrue(session.currentDump!.allChecksumsOK)
-        XCTAssertTrue(waitUntil { self.organ.acknowledgements == 17 })
+        XCTAssertTrue(waitUntil { self.organ.acknowledgements == acksBefore + 17 })
         let snap = session.finishDump()!
         XCTAssertEqual(snap.packets.filter { $0.type == 7 }.count, 6)
         XCTAssertEqual(snap.packets.filter { $0.type == 8 }.count, 11)

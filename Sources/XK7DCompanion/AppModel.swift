@@ -14,6 +14,7 @@ final class AppModel {
     let database = ParameterDatabase.shared
     let session: OrganSession
     let announcer = Announcer()
+    let midiLog = MIDILogFile()
     private(set) var connection: CoreMIDIConnection?
     private(set) var choice: PortChoice = .none
     private(set) var statusText = "Not connected."
@@ -44,6 +45,16 @@ final class AppModel {
             NotificationCenter.default.post(name: .historyChanged, object: nil)
         }
         session.onAnnouncement = { [weak self] in self?.announcer.announce($0) }
+        // The Leslie speed cuts in at once (VoiceOver's high priority; the Mac's voice stops what it's saying).
+        session.onUrgentAnnouncement = { [weak self] in self?.announcer.announce($0) }
+        session.onMIDI = { [weak self] incoming, bytes in self?.midiLog.midi(incoming: incoming, bytes) }
+        session.onNameNote = { [weak self] in self?.midiLog.note($0) }
+        session.onNRPNModeNoticed = { [weak self] in
+            guard let self, self.choice != .simulator else { return }
+            self.midiLog.note("The organ is sending NRPN, not SysEx")
+            self.announcer.announce("The organ is in NRPN mode, so custom settings such as pedal registration and patch names aren't sent. Organ menu, Set Up Organ for This App, fixes that.", polite: true)
+        }
+        session.askOrganForPatchNames = d.object(forKey: "askOrganForPatchNames") as? Bool ?? true
         session.onEvent = { [weak self] event, _ in self?.eventArrived(event) }
         session.onChannelMismatch = { [weak self] channel in
             guard let self else { return }
@@ -133,6 +144,7 @@ final class AppModel {
         session.output = nil
         canSend = true
         choice = c
+        midiLog.note("Port: \(c)")
         switch c {
         case .none:
             if remember { UserDefaults.standard.set("none", forKey: "port") }
@@ -216,6 +228,7 @@ final class AppModel {
     // MARK: Values
 
     private func eventArrived(_ e: OrganEvent) {
+        if case .unknownAddress(let a) = e { midiLog.note("Not in the app's table: address \(a.description)") }
         NotificationCenter.default.post(name: .organValuesChanged, object: nil, userInfo: ["event": e])
     }
 

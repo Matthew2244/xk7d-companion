@@ -68,12 +68,25 @@ public sealed class OrganSession
     public Action<OrganEvent, bool>? OnEvent { get; set; }
     /// <summary>Called with text ready to be spoken (already coalesced).</summary>
     public Action<string>? OnAnnouncement { get; set; }
+    /// <summary>Called instead of OnAnnouncement for a line that must be said at once, cutting off
+    /// whatever is being said (the Leslie speed). Falls back to OnAnnouncement.</summary>
+    public Action<string>? OnUrgentAnnouncement { get; set; }
+    /// <summary>Every byte received (true) or sent (false), for the MIDI log.</summary>
+    public Action<bool, byte[]>? OnMidi { get; set; }
+    /// <summary>A line for the MIDI log when the app asks the organ for a name or learns one.</summary>
+    public Action<string>? OnNameNote { get; set; }
     /// <summary>Called when the device ID was learned from the organ.</summary>
     public Action<byte>? OnDeviceIdLearned { get; set; }
     /// <summary>Called once per connection when the organ's controls arrive on a channel other than
     /// the Upper channel the app listens on. The argument is that channel, 0-based.</summary>
     public Action<int>? OnChannelMismatch { get; set; }
     readonly HashSet<int> reportedMismatch = new();
+
+    /// <summary>Called once per connection when a setting arrives as NRPN before any SysEx Data Set has:
+    /// the organ is in NRPN mode, so settings without an NRPN (every Custom set, such as the pedal
+    /// registration, and patch names) are never sent. Set Up Organ switches it to SysEx.</summary>
+    public Action? OnNrpnModeNoticed { get; set; }
+    bool sawDataSet, toldNrpnMode;
 
     /// <summary>Called for each dump packet while a dump is being received.</summary>
     public Action<DumpSnapshot>? OnDumpProgress { get; set; }
@@ -89,6 +102,38 @@ public sealed class OrganSession
     public bool HoldUntilAnswered { get; set; }
     /// <summary>The shortest gap between two value changes sent to the organ.</summary>
     public double MinimumSendGap { get; set; } = 0.02;
+
+    /// <summary>Ask the organ for a User patch's or Favorite's name with a Temporary dump when it
+    /// doesn't send one (see HANDOFF.md).</summary>
+    public bool AskOrganForPatchNames { get; set; } = true;
+    public double NameWait { get; set; } = 0.3;
+    public double NameDumpDelay { get; set; } = 0.15;
+    public double NameDumpWait { get; set; } = 1.2;
+
+    public enum NameDumpStates { Untried, Works, GaveUp }
+    public NameDumpStates NameDumpState { get; private set; } = NameDumpStates.Untried;
+    readonly Dictionary<string, string> patchNameCache = new();
+    /// <summary>Names learned this session, by part ("Upper" or "Lower") and slot ("patch U05").</summary>
+    public IReadOnlyDictionary<string, string> PatchNameCache => patchNameCache;
+
+    sealed class NameLookup
+    {
+        public required string Description;
+        public required string CacheKey;
+        public double StartedAt, Deadline;
+    }
+    sealed class NameFetch
+    {
+        public double RequestedAt;
+        public double? LastPacketAt;
+        public readonly SortedDictionary<int, byte[]> Packets = new();
+        public int Received;
+        public bool Done, Stale;
+    }
+    readonly Dictionary<string, NameLookup> lookups = new();
+    NameFetch? nameFetch;
+    int nameDumpMisses;
+    readonly Dictionary<string, string> currentSlotKey = new();
 
     readonly Dictionary<Address, int> values = new();
     readonly Dictionary<Address, string> texts = new();
@@ -134,6 +179,13 @@ public sealed class OrganSession
         identityAskedAt = null;
         identityAttempts = 0;
         reportedMismatch.Clear();
+        sawDataSet = false;
+        toldNrpnMode = false;
+        lookups.Clear();
+        nameFetch = null;
+        NameDumpState = NameDumpStates.Untried;
+        nameDumpMisses = 0;
+        currentSlotKey.Clear();
     }
 
     public void ForgetAllValues() { values.Clear(); texts.Clear(); drawbars.Clear(); }
@@ -179,7 +231,7 @@ public sealed class OrganSession
             heldUntilAnswered.Add(msg);
             return;
         }
-        Output?.Send(msg);
+        Deliver(msg);
     }
 
     void FlushPaced()
@@ -200,7 +252,7 @@ public sealed class OrganSession
             var m = (byte[])original.Clone();
             // The organ may have told us a different Device ID while these waited.
             if (m.Length > 2 && m[1] == XK7SysEx.SuzukiId) m[2] = Addressing.DeviceId;
-            Output?.Send(m);
+            Deliver(m);
         }
     }
 
@@ -213,6 +265,7 @@ public sealed class OrganSession
         var stored = TextCodec.Decode(TextCodec.Encode(text, setting.Parameter.Length));
         texts[setting.Address] = stored;
         sentTexts[setting.Address] = (stored, Clock());
+        LearnCurrentName(setting.Address, PatchNames.Clean(stored));
         Transmit(msg);
         return msg;
     }
@@ -222,16 +275,17 @@ public sealed class OrganSession
         if (!HoldUntilAnswered) OrganAnswered = false;
         identityAskedAt = Clock();
         identityAttempts = 1;
-        Output?.Send(XK7SysEx.IdentityRequest(Addressing.DeviceId));
+        Deliver(XK7SysEx.IdentityRequest(Addressing.DeviceId));
         if (Addressing.DeviceId != 0x7F)
         {
             // All-call as well, in case the organ's Device ID is not the one we assume.
-            Output?.Send(XK7SysEx.IdentityRequest(0x7F));
+            Deliver(XK7SysEx.IdentityRequest(0x7F));
         }
     }
 
     public void RequestDump(DumpType type)
     {
+        nameFetch = null;
         CurrentDump = new DumpSnapshot();
         Transmit(XK7SysEx.DumpRequest(Addressing.DeviceId, type));
     }
@@ -247,7 +301,16 @@ public sealed class OrganSession
 
     public void Receive(IEnumerable<byte> bytes)
     {
-        foreach (var m in parser.Feed(bytes)) Handle(m);
+        var array = bytes as byte[] ?? bytes.ToArray();
+        OnMidi?.Invoke(true, array);
+        foreach (var m in parser.Feed(array)) Handle(m);
+    }
+
+    void Deliver(byte[] bytes)
+    {
+        if (Output is not { } output) return;
+        OnMidi?.Invoke(false, bytes);
+        output.Send(bytes);
     }
 
     /// <summary>Speak whatever has settled. Call this often (the app does every 50 ms).</summary>
@@ -261,8 +324,8 @@ public sealed class OrganSession
             {
                 identityAttempts++;
                 identityAskedAt = Clock();
-                Output?.Send(XK7SysEx.IdentityRequest(Addressing.DeviceId));
-                Output?.Send(XK7SysEx.IdentityRequest(0x7F));
+                Deliver(XK7SysEx.IdentityRequest(Addressing.DeviceId));
+                Deliver(XK7SysEx.IdentityRequest(0x7F));
             }
             else
             {
@@ -270,6 +333,7 @@ public sealed class OrganSession
                 ReleaseHeld();
             }
         }
+        TickNames();
         foreach (var text in Coalescer.Due(Clock())) Speak(text);
     }
 
@@ -289,8 +353,7 @@ public sealed class OrganSession
             case MidiMessage.ProgramChange pc:
             {
                 if (Addressing.Part(pc.Channel) is not { } part) return;
-                var desc = PatchSelect.Describe(bankMsb.TryGetValue(pc.Channel, out var b) ? b : null, pc.Program);
-                Emit(new OrganEvent.Program(part, desc), $"program.{part}", $"{part}: {PatchSelect.Spoken(desc)}", false);
+                PatchChanged(part, bankMsb.TryGetValue(pc.Channel, out var b) ? b : null, pc.Program);
                 break;
             }
         }
@@ -309,6 +372,11 @@ public sealed class OrganSession
         }
         if (nrpn.Handle(controller, value) is { } v)
         {
+            if (!sawDataSet && !toldNrpnMode)
+            {
+                toldNrpnMode = true;
+                OnNrpnModeNoticed?.Invoke();
+            }
             if (Database.SettingForNrpn(v.Msb, v.Lsb) is { } s) Received(s, v.Raw);
             else Emit(new OrganEvent.UnknownAddress(new Address(0, 0, 0, v.Msb, v.Lsb)), null, null, false);
             return;
@@ -341,7 +409,15 @@ public sealed class OrganSession
             case 49: OnOff("Tone wheel brake", value); break;
             case 69: OnOff("Sustain", value); break;
             case 85: OnOff("ProChord", value); break;
-            case 92: OnOff("Leslie fast", value); break;
+            case 92:
+            {
+                // Leslie Fast as a control change (p. 176): said like the panel switch, at once.
+                var on = value >= 64;
+                values[LeslieFastAddress] = on ? 1 : 0;
+                OnEvent?.Invoke(new OrganEvent.Controller("Leslie fast", on), false);
+                SpeakUrgently(LeslieLine(LeslieFastAddress, on ? 1 : 0)!);
+                break;
+            }
         }
     }
 
@@ -357,6 +433,7 @@ public sealed class OrganSession
         {
             case XK7Inbound.DataSet ds:
                 LearnDevice(ds.Device);
+                sawDataSet = true;
                 DecodeDataSet(ds.Address, ds.Data);
                 break;
             case XK7Inbound.IdentityReply r:
@@ -370,6 +447,12 @@ public sealed class OrganSession
                 break;
             case XK7Inbound.DataPacket p:
                 LearnDevice(p.Device);
+                if (NameFetchPacket(p.Type, p.Packet, p.Data))
+                {
+                    if (AcknowledgeDumpPackets)
+                        Transmit(XK7SysEx.Acknowledge(p.Device, p.Type, p.ChecksumOK ? (byte)0x00 : (byte)0x05, p.Packet));
+                    break;
+                }
                 CurrentDump ??= new DumpSnapshot();
                 CurrentDump.Packets.Add(new DumpSnapshot.Packet(p.Type, p.Packet, p.Data, p.ChecksumOK));
                 CurrentDump.RawMessages.Add(bytes);
@@ -414,12 +497,203 @@ public sealed class OrganSession
         values[s.Address] = raw;
         var echo = IsRecent(sentValues.TryGetValue(s.Address, out var sv) ? (sv.Raw == raw, sv.At) : null);
         if (DrawbarKey(s) is { } d) drawbars[d] = raw;
-        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), $"{s.SpokenName}: {s.Parameter.Spoken(raw)}", echo);
+        if (LeslieLine(s.Address, raw) is { } rotor)
+        {
+            OnEvent?.Invoke(new OrganEvent.Value(s, raw), echo);
+            if (!echo) SpeakUrgently(rotor);
+            return;
+        }
+        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), Line(s, raw), echo);
+    }
+
+    /// <summary>What is said for a setting's new value. An Off/On setting is "Percussion on", not "Percussion on: On".</summary>
+    public static string Line(Setting s, int raw)
+    {
+        var k = s.Parameter.Kind;
+        if (k.Type == ValueType.Choices && k.Options.Count == 2 && k.Options[0].Raw == 0 && k.Options[0].Label == "Off"
+            && k.Options[1].Raw == 1 && k.Options[1].Label == "On" && (raw == 0 || raw == 1))
+        {
+            var name = s.SpokenName;
+            foreach (var suffix in new[] { ": on", " on" })
+                if (name.EndsWith(suffix, StringComparison.Ordinal)) { name = name[..^suffix.Length]; break; }
+            return $"{name} {(raw == 1 ? "on" : "off")}";
+        }
+        return $"{s.SpokenName}: {s.Parameter.Spoken(raw)}";
+    }
+
+    // Leslie speed
+
+    internal static readonly Address LeslieFastAddress = new(0, 0, 0, 0x12, 0x0A);
+    internal static readonly Address LeslieStopAddress = new(0, 0, 0, 0x12, 0x09);
+
+    /// <summary>The rotor state as one word (p. 59): Fast; otherwise Stop when [STOP] is lit, else Slow.</summary>
+    internal string? LeslieLine(Address a, int raw)
+    {
+        if (a == LeslieFastAddress)
+        {
+            if (raw == 1) return "Fast";
+            return values.TryGetValue(LeslieStopAddress, out var st) && st == 1 ? "Stop" : "Slow";
+        }
+        if (a == LeslieStopAddress)
+        {
+            if (values.TryGetValue(LeslieFastAddress, out var f) && f == 1) return raw == 1 ? "Stop mode on" : "Stop mode off";
+            return raw == 1 ? "Stop" : "Slow";
+        }
+        return null;
+    }
+
+    void SpeakUrgently(string text)
+    {
+        Coalescer.Cancel("cc.Leslie fast");
+        LastAnnouncement = text;
+        if (OnUrgentAnnouncement is { } urgent) urgent(text); else OnAnnouncement?.Invoke(text);
+    }
+
+    // Patch names
+
+    internal static readonly Address NameUpperAddress = new(0, 0, 0x10, 0, 0);
+    internal static readonly Address NameLowerAddress = new(0, 0, 0x10, 0, 1);
+
+    static string NamePart(string part) => PatchNames.UsesUpperName(part) ? "Upper" : "Lower";
+
+    static string[]? PartsForNameAt(Address a)
+    {
+        if (a == NameUpperAddress) return new[] { "Upper" };
+        if (a == NameLowerAddress) return new[] { "Lower", "Pedal" };
+        return null;
+    }
+
+    void PatchChanged(string part, int? bank, int program)
+    {
+        var desc = PatchSelect.Describe(bank, program);
+        var key = $"program.{part}";
+        var now = Clock();
+        OnEvent?.Invoke(new OrganEvent.Program(part, desc), false);
+        lookups.Remove(part);
+        if (nameFetch is not null) nameFetch.Stale = true;
+        var cacheKey = NamePart(part) + "|" + desc;
+        if (PatchNames.FactoryName(part, bank, program) is { } name)
+        {
+            currentSlotKey.Remove(part);
+            Coalescer.Submit(key, PatchNames.Announcement(part, desc, name), now);
+        }
+        else if (PatchNames.IsLookupSlot(bank, program))
+        {
+            currentSlotKey[part] = cacheKey;
+            var wait = WillAskByDump ? NameDumpWait : NameWait;
+            lookups[part] = new NameLookup { Description = desc, CacheKey = cacheKey, StartedAt = now, Deadline = now + wait };
+            Coalescer.Submit(key, PatchNames.Announcement(part, desc, null), now, now + wait + 0.25);
+        }
+        else
+        {
+            currentSlotKey.Remove(part);
+            Coalescer.Submit(key, PatchNames.Announcement(part, desc, null), now);
+        }
+    }
+
+    bool WillAskByDump => AskOrganForPatchNames && Output is not null && NameDumpState != NameDumpStates.GaveUp;
+
+    void FinishLookup(string part, string? name)
+    {
+        if (!lookups.Remove(part, out var l)) return;
+        if (!string.IsNullOrEmpty(name)) patchNameCache[l.CacheKey] = name;
+        else name = patchNameCache.TryGetValue(l.CacheKey, out var cached) ? cached : null;
+        Coalescer.Release($"program.{part}", PatchNames.Announcement(part, l.Description, name));
+    }
+
+    bool NameArrived(Address a, string name)
+    {
+        if (PartsForNameAt(a) is not { } parts) return false;
+        var used = false;
+        foreach (var p in parts)
+        {
+            if (!lookups.ContainsKey(p)) continue;
+            OnNameNote?.Invoke($"Name for {p} arrived from the organ: {name}");
+            FinishLookup(p, name);
+            used = true;
+        }
+        if (!used) LearnCurrentName(a, name);
+        return used;
+    }
+
+    void LearnCurrentName(Address a, string name)
+    {
+        if (PartsForNameAt(a) is not { } parts || name.Length == 0) return;
+        foreach (var p in parts) if (currentSlotKey.TryGetValue(p, out var k)) patchNameCache[k] = name;
+    }
+
+    void TickNames()
+    {
+        var now = Clock();
+        if (nameFetch is { } f)
+        {
+            var since = f.LastPacketAt ?? f.RequestedAt;
+            if (f.Received >= XK7SysEx.TemporaryPackets + XK7SysEx.AdjustPackets || now - since > 0.6)
+            {
+                nameFetch = null;
+                if (!f.Done && !f.Stale) DumpMissed(f.Received == 0 ? "no dump came back" : "no names found in the dump");
+            }
+        }
+        if (nameFetch is null && WillAskByDump && CurrentDump is null && lookups.Count > 0
+            && now - lookups.Values.Max(l => l.StartedAt) >= NameDumpDelay
+            && lookups.Values.Any(l => now < l.Deadline))
+        {
+            nameFetch = new NameFetch { RequestedAt = now };
+            OnNameNote?.Invoke("Asking the organ for the patch name (Temporary dump request)");
+            Transmit(XK7SysEx.DumpRequest(Addressing.DeviceId, DumpType.Temporary));
+        }
+        foreach (var (part, l) in lookups.ToList())
+            if (now >= l.Deadline) FinishLookup(part, null);
+    }
+
+    void DumpMissed(string why)
+    {
+        nameDumpMisses++;
+        OnNameNote?.Invoke($"Patch name by dump: {why}");
+        if (nameDumpMisses >= 2 && NameDumpState != NameDumpStates.Works)
+        {
+            NameDumpState = NameDumpStates.GaveUp;
+            OnNameNote?.Invoke("Stopped asking the organ for patch names on this connection");
+        }
+        foreach (var part in lookups.Keys.ToList()) FinishLookup(part, null);
+    }
+
+    bool NameFetchPacket(byte type, int packet, byte[] data)
+    {
+        if (nameFetch is not { } f || CurrentDump is not null) return false;
+        f.Received++;
+        f.LastPacketAt = Clock();
+        if (type == (byte)DumpType.Temporary) f.Packets[packet] = data;
+        if (!f.Done && !f.Stale)
+        {
+            var stream = f.Packets.Values.SelectMany(x => x).ToArray();
+            if (PatchNames.FromTemporaryDump(stream) is { } names)
+            {
+                f.Done = true;
+                NameDumpState = NameDumpStates.Works;
+                nameDumpMisses = 0;
+                OnNameNote?.Invoke($"Names found in the dump: Upper {names.Upper}, Lower {names.Lower}");
+                texts[NameUpperAddress] = names.Upper;
+                texts[NameLowerAddress] = names.Lower;
+                foreach (var p in lookups.Keys.ToList()) FinishLookup(p, NamePart(p) == "Upper" ? names.Upper : names.Lower);
+            }
+            else if (type != (byte)DumpType.Temporary || f.Packets.Count >= XK7SysEx.TemporaryPackets)
+            {
+                f.Done = true;
+                DumpMissed("no names found in the dump");
+            }
+        }
+        return true;
     }
 
     void ReceivedText(Setting s, string text)
     {
         texts[s.Address] = text;
+        if (NameArrived(s.Address, PatchNames.Clean(text)))
+        {
+            OnEvent?.Invoke(new OrganEvent.Text(s, text), false);
+            return;
+        }
         var echo = IsRecent(sentTexts.TryGetValue(s.Address, out var st) ? (st.Text == text, st.At) : null);
         Emit(new OrganEvent.Text(s, text), s.Address.ToString(), $"{s.SpokenName}: {(text.Length == 0 ? "blank" : text)}", echo);
     }

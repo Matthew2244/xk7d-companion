@@ -245,12 +245,12 @@ public class OrganSessionTests
         Assert.True(events[^1].Item2, "reported as an echo");
         session.Receive(Bytes("B0 06 00"));                // a different value is not an echo
         Advance(1);
-        Assert.Equal(new[] { "Percussion on: Off" }, spoken);
+        Assert.Equal(new[] { "Percussion off" }, spoken);
         session.Set(s, 1);
         now += 10;                                         // and the same value much later is a real change
         session.Receive(Bytes("B0 63 11 62 00 06 01"));
         Advance(1);
-        Assert.Equal("Percussion on: On", spoken[^1]);
+        Assert.Equal("Percussion on", spoken[^1]);
     }
 
     [Fact]
@@ -273,8 +273,10 @@ public class OrganSessionTests
         session.Receive(Bytes("B0 00 01 B0 20 00 C0 0F"));
         session.Receive(Bytes("B1 00 65 C1 69"));
         session.Receive(Bytes("C2 7F"));
-        Advance(0.4);
-        Assert.Equal(new[] { "Upper: patch F15", "Lower: Favorite C sharp-F", "Pedal: Adjust B" }, spoken);
+        // Factory patches are named from the manual's table at once; the Favorite waits for a name
+        // from the organ, which doesn't come here, so it's said by slot after the wait (last).
+        for (var i = 0; i < 30; i++) Advance(0.05);
+        Assert.Equal(new[] { "Upper: Kinda Brian, F15", "Pedal: Adjust B", "Lower: Favorite C sharp-F" }, spoken);
     }
 
     [Fact]
@@ -290,7 +292,7 @@ public class OrganSessionTests
     {
         session.Receive(Bytes("F0 55 00 10 26 13 00 00 00 11 00 01 01 00 F7"));
         Advance(0.4);
-        Assert.Equal(new[] { "Percussion on: On", "Percussion harmonic: Third", "Percussion decay: Slow" }, spoken);
+        Assert.Equal(new[] { "Percussion on", "Percussion harmonic: Third", "Percussion decay: Slow" }, spoken);
     }
 
     [Fact]

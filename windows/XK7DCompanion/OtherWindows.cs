@@ -128,7 +128,10 @@ public sealed class SimulatorWindow : Window
 public sealed class SettingsWindow : Window
 {
     readonly AppModel model;
-    readonly ComboBox methodBox, settleBox, deviceBox;
+    readonly ComboBox methodBox, settleBox, deviceBox, voiceBox, speedBox, volumeBox;
+    readonly CheckBox namesBox;
+    List<string> voices = new();
+    static readonly int[] Volumes = { 100, 75, 50, 25 };
     readonly List<ComboBox> channelBoxes = new();
     bool updating;
     static readonly int[] SettleChoices = Enumerable.Range(0, 39).Select(i => 100 + i * 50).ToArray();
@@ -146,10 +149,25 @@ public sealed class SettingsWindow : Window
         foreach (var m in Enum.GetValues<Announcer.Method>()) methodBox.Items.Add(Announcer.Title(m));
         methodBox.SelectionChanged += (_, _) => Changed();
         panel.Children.Add(Ui.Row(Ui.LabelFor("Speak with:", methodBox), methodBox));
+        voiceBox = new ComboBox { MinWidth = 300 }.Named("Windows voice", "The voice used when no screen reader is speaking. Windows default follows Settings, Time and language, Speech.");
+        voiceBox.SelectionChanged += (_, _) => Changed();
+        panel.Children.Add(Ui.Row(Ui.LabelFor("Windows voice:", voiceBox), voiceBox));
+        speedBox = new ComboBox { MinWidth = 140 }.Named("Speed", "How fast the Windows voice speaks. Screen readers keep their own speed.");
+        foreach (var t in Announcer.SpeedTitles) speedBox.Items.Add(t);
+        speedBox.SelectionChanged += (_, _) => Changed();
+        volumeBox = new ComboBox { MinWidth = 120 }.Named("Loudness", "How loud the Windows voice is. Screen readers keep their own volume.");
+        foreach (var v in Volumes) volumeBox.Items.Add($"{v} percent");
+        volumeBox.SelectionChanged += (_, _) => Changed();
+        var sample = Ui.Button("Say a Sample", "Says a patch change in the Windows voice with these settings.", (_, _) => { Changed(); model.Announcer.Sample(); });
+        panel.Children.Add(Ui.Row(Ui.LabelFor("Speed:", speedBox), speedBox, Ui.LabelFor("Loudness:", volumeBox), volumeBox, sample));
         settleBox = new ComboBox { MinWidth = 100 }.Named("Wait before speaking, milliseconds", "How long a knob must stop moving before its value is spoken. Shorter is quicker, longer is quieter.");
         foreach (var ms in SettleChoices) settleBox.Items.Add(ms.ToString());
         settleBox.SelectionChanged += (_, _) => Changed();
         panel.Children.Add(Ui.Row(Ui.LabelFor("Wait before speaking, milliseconds:", settleBox), settleBox));
+        namesBox = new CheckBox { Content = "Ask the organ for User patch names", Margin = new Thickness(0, 4, 0, 4) }
+            .Named("Ask the organ for User patch names", "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.");
+        namesBox.Click += (_, _) => Changed();
+        panel.Children.Add(namesBox);
         panel.Children.Add(Ui.Text("MIDI", bold: true));
         deviceBox = new ComboBox { MinWidth = 100 }.Named("Organ device ID", "The organ's Device ID, MENU, SYSTEM, MIDI, SYS EX page. The app learns it when the organ answers.");
         for (var i = 0; i < 128; i++) deviceBox.Items.Add(i.ToString());
@@ -181,6 +199,16 @@ public sealed class SettingsWindow : Window
     {
         updating = true;
         methodBox.SelectedIndex = (int)model.Announcer.SpeakWith;
+        if (voiceBox.Items.Count == 0)
+        {
+            voices = Prism.WindowsVoices();
+            voiceBox.Items.Add("Windows default");
+            foreach (var v in voices) voiceBox.Items.Add(v);
+        }
+        voiceBox.SelectedIndex = model.Announcer.VoiceName is { } vn && voices.IndexOf(vn) is var vi and >= 0 ? vi + 1 : 0;
+        speedBox.SelectedIndex = model.Announcer.Speed;
+        volumeBox.SelectedIndex = Math.Max(Array.IndexOf(Volumes, model.Announcer.VolumePercent), 0);
+        namesBox.IsChecked = model.Session.AskOrganForPatchNames;
         var settle = (int)Math.Round(model.Session.Coalescer.Settle * 1000);
         settleBox.SelectedIndex = Array.IndexOf(SettleChoices, SettleChoices.MinBy(c => Math.Abs(c - settle)));
         var a = model.Session.Addressing;
@@ -203,6 +231,11 @@ public sealed class SettingsWindow : Window
     {
         if (updating) return;
         model.Announcer.SpeakWith = (Announcer.Method)Math.Max(methodBox.SelectedIndex, 0);
+        model.Announcer.VoiceName = voiceBox.SelectedIndex > 0 && voiceBox.SelectedIndex <= voices.Count ? voices[voiceBox.SelectedIndex - 1] : null;
+        model.Announcer.Speed = Math.Max(speedBox.SelectedIndex, 0);
+        model.Announcer.VolumePercent = Volumes[Math.Max(volumeBox.SelectedIndex, 0)];
+        model.Session.AskOrganForPatchNames = namesBox.IsChecked == true;
+        model.Settings.Set("askOrganForPatchNames", model.Session.AskOrganForPatchNames);
         var settle = SettleChoices[Math.Max(settleBox.SelectedIndex, 0)];
         model.Session.Coalescer.Settle = settle / 1000.0;
         model.Settings.Set("settleMilliseconds", settle);

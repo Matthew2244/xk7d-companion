@@ -162,7 +162,13 @@ public final class SimulatedOrgan {
         case 0x0A: plan = [(0x0A, XK7SysEx.systemPackets)]
         default: return
         }
+        // Invented layout: the Upper and Lower names first, side by side, then values. Only the
+        // names' being next to each other matters to the app (PatchNames.fromTemporaryDump).
         var stream: [UInt8] = []
+        if type == 0x07 {
+            stream += TextCodec.encode(texts[Address(0, 0, 0x10, 0, 0)] ?? "", length: 16)
+            stream += TextCodec.encode(texts[Address(0, 0, 0x10, 0, 1)] ?? "", length: 16)
+        }
         for (addr, v) in values.sorted(by: { $0.key < $1.key }) {
             stream += addr.bytes + [UInt8((v >> 7) & 0x7F), UInt8(v & 0x7F)]
         }
@@ -234,9 +240,37 @@ public final class SimulatedOrgan {
         }
     }
 
+    /// User patch names renamed in the simulator, by part name ("Upper", "Lower") and program.
+    /// Unrenamed User patches carry the factory names, as the organ's do from new (p. 35).
+    public var userPatchNames: [String: String] = [:]
+    /// Whether recalling a patch also sends its name as a Data Set (only in SysEx mode). Whether the
+    /// real organ does is unknown; the app handles both.
+    public var sendsNameOnRecall = false
+
+    /// The name a part takes from a patch, or nil for Favorites and Adjust (the simulator doesn't model them).
+    public func patchName(part: String, bankMSB: Int, program: Int) -> String? {
+        let column = part == "Upper" ? "Upper" : "Lower"
+        if bankMSB == 0, (0..<100).contains(program) {
+            return userPatchNames["\(column)|\(program)"] ?? PatchNames.factoryName(part: part, bank: 1, program: program)
+        }
+        return PatchNames.factoryName(part: part, bank: bankMSB, program: program)
+    }
+
     /// Recall a patch from the panel: bank select and program change on the part's channel.
     public func selectPatch(part: String, bankMSB: Int, program: Int) {
+        let nameAddress = Address(0, 0, 0x10, 0, part == "Upper" ? 0 : 1)
+        if let name = patchName(part: part, bankMSB: bankMSB, program: program) {
+            // The organ's own character set is unknown; the footage mark goes as an apostrophe here.
+            let ascii = name.replacingOccurrences(of: "\u{B4}", with: "'")
+            texts[nameAddress] = TextCodec.decode(TextCodec.encode(ascii, length: 16))
+            onChange?("\(part) patch name is now \(name)")
+        }
         guard transmitsProgramChange else { return }
+        defer {
+            if sendsNameOnRecall, individualMode == .sysex, let s = database.setting(at: nameAddress) {
+                transmit(XK7SysEx.dataSet(device: deviceID, setting: s, text: texts[nameAddress] ?? ""))
+            }
+        }
         let ch = part == "Lower" ? lowerChannel : (part == "Pedal" ? pedalChannel : upperChannel)
         transmit(MIDIMessage.controlChange(channel: ch, controller: 0, value: bankMSB).bytes)
         transmit(MIDIMessage.controlChange(channel: ch, controller: 32, value: 0).bytes)

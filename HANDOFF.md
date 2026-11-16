@@ -1,7 +1,8 @@
 # Hand-off notes
 
 Version 1.1.0 added a Windows version, and updates through Sparkle on the Mac
-and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1". Both versions have been tested against the
+and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1".
+1.2.0 answers the first report from a real XK-7D; see "Changes in 1.2.0". Both versions have been tested against the
 built-in simulator only. Neither has been connected to a real XK-7D. The
 Windows version has been built and tested on GitHub's Windows runners, and
 nobody has used it yet with a screen reader on a real PC.
@@ -36,6 +37,9 @@ Three Swift modules in one package (`Package.swift`):
     (a fast sweep is merged, latest value wins, at most one every 20 ms) and
     can hold sends until the other end answers an Identity Request (used for
     the simulator; see "Lost first message" below).
+  - `PatchNames.swift`: the factory patch names (pp. 172-173), reading names
+    out of a Temporary dump, and the spoken patch line.
+  - `MIDILog.swift`: `MIDILogger`, one line per message for the MIDI log.
   - `SimulatedOrgan.swift`, `Loopback.swift`: the simulator and an
     in-process link.
 - **XK7DCoreMIDI**: `CoreMIDIConnection` (list ports, connect, send, receive)
@@ -303,7 +307,8 @@ Every change goes out as a SysEx Data Set:
 7-bit bytes, MSB first. The manual says SysEx is received whatever the
 Individual Parameters setting is. The app never sends anything unprompted
 except an Identity Request when you connect (to the configured ID and to
-all-call 7F).
+all-call 7F) and, since 1.2.0, a Temporary Dump Request after a User patch or
+Favorite is chosen (see "Patch names"; Settings can turn it off).
 
 ## The parameter table pipeline
 
@@ -349,7 +354,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Mac updates | Rehearsal on the Studio: tampered refused, good one installed (above) |
 | Windows updates | CI's update rehearsal (above) |
 
-Tests: Swift, 108 unit tests and 5 integration tests. C#, 124 tests.
+Tests: Swift, 131 unit tests and 5 integration tests. C#, 150 tests (1.2.0).
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -405,7 +410,10 @@ Tests: Swift, 108 unit tests and 5 integration tests. C#, 124 tests.
 7. Whether VoiceOver speaks the app's announcements while it is in the
    background (Settings has a Mac-voice fallback for that case). This hasn't
    been tried with VoiceOver running.
-8. The XK-7D's USB MIDI port name, so the app recognises it on first launch.
+8. Patch names and the dump (see "Changes in 1.2.0"), and whether Custom
+   edits are sent at all in SysEx mode. A MIDI log from the organ answers
+   most of it.
+9. The XK-7D's USB MIDI port name, so the app recognises it on first launch.
    It matches anything containing "XK-7", "Hammond" or "Suzuki", in any case,
    with or without spaces and hyphens.
 
@@ -532,6 +540,121 @@ might never answer and must still get your changes.
 The Developer ID comes from the Keychain, and the App Store Connect key from
 the Keychain entry `asc-api-key`. Nothing secret is in the repository or on
 GitHub.
+
+## Changes in 1.2.0 (first real-organ report)
+
+Matthew's friend, who is sighted and hears the app through the Mac's voice
+(no VoiceOver), is using it on a real XK-7D. His reports: "it's working
+amazing", but patch changes said "F1, U2" and not the patch's name; Leslie
+speed changes are announced; moving through the organ's menus says nothing;
+adjusting the pedal harmonics says nothing.
+
+### Patch names
+
+What the manual says the organ sends on a patch change: Bank Select (CC 0 =
+00 User, 01 Factory, 64-6D Favorite bank C-A; CC 32 always 00) then Program
+Change (00-63 patch, 64-6D Favorite key, 7E/7F Adjust), p. 176, when Program
+Change is On (p. 155). Nothing else is documented for a patch change. The
+patch name is a parameter (Name Upper 00 00 10 00 00, Name Lower 00 00 10 00
+01, 16 letters, p. 178) with **no NRPN**, so the organ can only send it as a
+SysEx Data Set. **There is no single-parameter "Data Request" in the
+manual's SysEx list** (p. 177): only Dump Request (07 Temporary: "the Patch
+Parameters of the current Patch and the Adjust Presets", replies 07 and 08;
+0A System). So:
+
+1. **Factory patches** (bank 01, F00-F99) "cannot be changed" (p. 35), so
+   their names come from the Factory Patches table (pp. 172-173), built in
+   (`PatchNames.factoryUpper/Lower`). Upper uses the UPPER column; Lower and
+   Pedal the LOWER and PEDAL column. Said at once: "Upper: Kinda Brian, F15".
+   The table prints some names longer than 16 letters ("Principal Chorus +
+   Mixture"), so the organ's own display may differ; we say the table's.
+2. **User patches and Favorites** wait for a name (`OrganSession`
+   `patchChanged`, `tickNames`):
+   - If the organ sends the Name Data Set itself within the wait (it may, in
+     SysEx mode, if a recall sends every parameter), that name is used and
+     not said again on its own.
+   - Otherwise, 0.15 s after the last patch change (so stepping through
+     patches asks once), the app sends a Temporary Dump Request and reads the
+     names out of the type 07 packets (`PatchNames.fromTemporaryDump`). **The
+     dump layout isn't published**, so this looks for the two 16-letter names
+     side by side (their addresses are neighbours): 32 printable bytes in a
+     row, each half at least half letters or spaces, at least 3 letters. Our
+     own request's packets are acknowledged and kept out of Read from Organ.
+   - The line waits up to 1.2 s for that (0.3 s if not asking), then falls
+     back to the last name learned for that slot this session, or the slot
+     alone ("Upper: patch U05"). It is said once either way: the coalescer
+     holds the line (`submit(holdUntil:)`) and `release` fills in the name,
+     keeping its place.
+   - If the organ answers no dump (or no names are found) twice on a
+     connection, the app stops asking for that connection
+     (`nameDumpState = .gaveUp`) so later changes aren't delayed.
+   - Names are remembered per part and slot for the session, updated when
+     the current patch is renamed from the app or a name arrives from the
+     organ.
+   - Adjust A#/B and unknown banks are said by slot only.
+3. The simulator now puts the Upper and Lower names first in its Temporary
+   dump (an invented layout), and its User patches carry the factory names
+   until renamed (`userPatchNames`), as a new organ's do.
+
+**To confirm on the organ** (the MIDI log shows all of it): whether the dump
+arrives; whether the names are side by side in it, and whether they're
+padded with spaces and carry the "U"/"L" marker; the organ's character for
+the footage mark (we speak ´, ' and ’ after a number as "foot"); whether a
+recall in SysEx mode sends the name by itself; whether Lower takes the
+patch's Lower name; whether a dump request shows anything on the organ's
+display (if it's a nuisance, Settings turns asking off).
+
+### Speech
+
+- Leslie: "Fast", "Slow" or "Stop", said at once and cutting off anything
+  else (`onUrgentAnnouncement`), never coalesced. From p. 59: [FAST] on is
+  Fast; off, it's Stop when [STOP] is lit, else Slow. [STOP] pressed while
+  fast is said "Stop mode on/off". CC 92 is treated the same.
+- Off/On settings are short: "Percussion on", "Leslie bypass off", not
+  "Percussion on: On" (`OrganSession.line`).
+- Mac voice (no VoiceOver): Settings has the voice (System voice follows
+  Spoken Content through `prefersAssistiveTechnologySettings`), speed and
+  loudness, and Say a Sample. Windows voice: the same through Prism's
+  `set_voice`, `set_rate` and `set_volume`; Prism doesn't document ranges,
+  so speed and loudness are scaled from the voice's own starting values.
+  Untested on a real PC.
+- With VoiceOver or a screen reader running, Automatic speaks only through
+  it, as before.
+
+### Things the organ doesn't send
+
+- **Menu and page navigation.** The manual's MIDI implementation (pp.
+  176-185) has no message for moving through the display; only parameter
+  values, patch changes and controllers are transmitted. So the app can't
+  follow the menus, only the values changed in them.
+- **Custom settings in NRPN mode.** Every Custom set parameter (tone wheels,
+  contacts, **pedal registration**, Leslie cabinets, pipes) and the patch
+  names have no NRPN, so in NRPN mode (what the organ's MIDI templates set)
+  they are never sent. The pedal harmonics the tester adjusted are the
+  Custom Pedal Registration's sub drawbar levels (p. 118; p. 182, "Temporary Pedal", address 31 00 00
+  0m 0s), which is this case. Set Up Organ switches Individual Parameters to
+  SysEx. The app now says so once per connection when NRPN arrives before
+  any Data Set (`onNRPNModeNoticed`). Whether the organ transmits Custom
+  menu edits at all, even in SysEx mode, is unconfirmed.
+- `EverySettingSpeaksTests` (both languages) sends every setting of all 537,
+  every index sample, as a Data Set, and every NRPN setting as NRPN, and
+  checks each is said exactly once. All are.
+
+### The MIDI log
+
+Help > Keep a MIDI Log (both systems) writes every message to and from the
+organ, with a timestamp and a short description, to
+`~/Library/Logs/XK-7D Companion/MIDI Log.txt` (Mac) or
+`%APPDATA%\XK-7D Companion\Logs\MIDI Log.txt` (Windows). Notes, pitch
+bend, expression (CC 11), damper (CC 64) and real-time bytes are counted, not
+written. The app's own steps (asking for a name, what was found, the port,
+addresses not in the table) are lines starting "---". Over 20 MB it becomes
+"MIDI Log (previous).txt". Help > Show MIDI Log in Finder / Explorer.
+`MIDILogger` is in the core, ported, and checked by the shared vectors.
+
+Tests: Swift 131 unit and 5 integration; C# 150. Shared vectors now also
+cover the factory names, patch lines, dump name reading, name cleaning, the
+spoken line for every setting, and the MIDI log.
 
 ## Changes in 1.1.1 (independent review)
 

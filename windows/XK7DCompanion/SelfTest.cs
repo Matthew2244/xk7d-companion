@@ -58,8 +58,8 @@ static class SelfTest
                 ("WINDOWS built", "the windows build"),
                 ("SIMULATOR organ type raw 5", "a change made in the app reaches the simulator"),
                 ("ANNOUNCE Leslie horn fast speed: ", "a turning knob is spoken"),
-                ("ANNOUNCE Percussion on: ", "a switch is spoken"),
-                ("ANNOUNCE Upper: patch U", "a patch change is spoken"),
+                ("ANNOUNCE Percussion o", "a switch is spoken"),
+                ("ANNOUNCE Upper: ", "a patch change is spoken"),
                 ("ANNOUNCE Upper 8 foot: ", "a drawbar is spoken"),
                 ("READ The organ answered. Received 17 of 17 dump packets, all checks good", "Read from Organ"),
             };
@@ -68,6 +68,10 @@ static class SelfTest
             // A knob sweep must be spoken once, not thirty times.
             var horn = log.Count(l => l.StartsWith("ANNOUNCE Leslie horn fast speed: ", StringComparison.Ordinal));
             if (horn != 1) missing.Add($"the knob sweep spoken once (it was spoken {horn} times)");
+            // The User patch is said by the name the simulator's dump carries, then its number.
+            if (!log.Any(l => l.StartsWith("ANNOUNCE Upper: ", StringComparison.Ordinal) && l.Contains(", U", StringComparison.Ordinal)
+                              && !l.Contains("patch U", StringComparison.Ordinal)))
+                missing.Add("a User patch said by name");
             log.Add(missing.Count == 0 ? "SELFTEST OK" : "SELFTEST FAILED: " + string.Join("; ", missing));
             Write();
             exit = missing.Count == 0 ? 0 : 1;

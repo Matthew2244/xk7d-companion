@@ -79,7 +79,13 @@ list, and whatever you change in the app is sent to the organ.
 Once it's set up, just play. Some examples of what you'll hear:
 
 - Pull a drawbar: "Upper 8 foot: 6". The name comes first, then the value.
-- Change patches: "Upper: patch F15".
+- Change patches: "Upper: Kinda Brian, F15". The name comes first, then the
+  number. Factory patch names come from the manual. For User patches and
+  Favorites the app asks the organ for the name; if none comes back, you hear
+  the number alone ("Upper: patch U05").
+- Switch the Leslie: "Fast", "Slow" or "Stop", said at once, cutting off
+  anything else.
+- Turn something on or off: "Percussion on", "Leslie bypass off".
 - Change a Leslie setting in the menus: "Leslie horn fast speed: 340 rpm".
 
 A few things make it easier to follow while you play:
@@ -104,8 +110,30 @@ A few things make it easier to follow while you play:
 - **Need quiet?** Command Shift M (Control Shift M) mutes and unmutes the
   announcements. The app keeps listening and keeps its list up to date.
 
-The app only listens. It never sends anything to the organ unless you change
-something in the app or choose Set Up Organ.
+The app mostly listens. It sends nothing to the organ unless you change
+something in the app or choose Set Up Organ, with one exception: when you
+choose a User patch or a Favorite, it asks the organ for the patch's name (a
+memory dump request). Settings, "Ask the organ for User patch names", turns
+that off.
+
+Moving around the organ's own menus and pages sends nothing over MIDI, so the
+app can't follow you through them. It speaks when a setting changes.
+
+### Speech without a screen reader
+
+With VoiceOver (or NVDA, JAWS or Narrator on Windows) running, the app speaks
+through it. Without one, it uses the computer's own voice. Settings has the
+voice, the speed and the loudness, with Say a Sample to hear them. Command
+Shift M (Control Shift M) mutes.
+
+### The MIDI log
+
+To help find out what a real organ sends, the app can write everything that
+goes to and from the organ to a text file. Choose Help, Keep a MIDI Log. Use
+the organ as usual, then Help, Show MIDI Log in Finder (Show MIDI Log in
+Explorer on Windows) and send the file. Notes, the expression pedal and the
+damper are only counted, so playing doesn't fill it. Choose Keep a MIDI Log
+again to stop.
 
 ### If the organ seems silent
 

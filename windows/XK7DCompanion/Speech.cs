@@ -37,6 +37,89 @@ public static class Prism
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
     static extern int prism_backend_output(IntPtr b, byte[] text, [MarshalAs(UnmanagedType.I1)] bool interrupt);
     [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern void prism_backend_free(IntPtr b);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_get_rate(IntPtr b, out float rate);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_set_rate(IntPtr b, float rate);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_get_volume(IntPtr b, out float volume);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_set_volume(IntPtr b, float volume);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_count_voices(IntPtr b, out UIntPtr count);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_get_voice_name(IntPtr b, UIntPtr index, out IntPtr name);
+    [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)] static extern int prism_backend_set_voice(IntPtr b, UIntPtr index);
+
+    /// <summary>The Windows voice's settings: a voice by name (null for Windows' default), a speed
+    /// (0 = Windows' own, 1 slow, 2 normal, 3 fast, 4 very fast) and a loudness in percent. Speed and
+    /// loudness are applied relative to what the voice reports at first, since Prism doesn't document
+    /// its ranges.</summary>
+    public static (string? Voice, int Speed, int Volume) VoiceConfig { get; private set; } = (null, 0, 100);
+    static int voiceConfigVersion = 1;
+    static readonly Dictionary<ulong, (float Rate, float Volume, int Version)> voiceState = new();
+
+    public static void SetVoiceConfig(string? voice, int speed, int volume)
+    {
+        VoiceConfig = (string.IsNullOrEmpty(voice) ? null : voice, speed, Math.Clamp(volume, 25, 100));
+        voiceConfigVersion++;
+    }
+
+    static void ApplyVoiceConfig(ulong id, IntPtr b)
+    {
+        try
+        {
+            if (!voiceState.TryGetValue(id, out var st))
+            {
+                prism_backend_get_rate(b, out var r0);
+                prism_backend_get_volume(b, out var v0);
+                st = (r0, v0, 0);
+            }
+            if (st.Version == voiceConfigVersion) return;
+            var (voice, speed, volume) = VoiceConfig;
+            if (voice is not null && VoiceNames(b).IndexOf(voice) is var i and >= 0) prism_backend_set_voice(b, (UIntPtr)i);
+            var factor = speed switch { 1 => 0.8f, 3 => 1.25f, 4 => 1.5f, _ => 1f };
+            var rate = st.Rate * factor;
+            if (st.Rate <= 1f) rate = Math.Clamp(rate, 0f, 1f);
+            prism_backend_set_rate(b, rate);
+            prism_backend_set_volume(b, st.Volume * volume / 100f);
+            voiceState[id] = (st.Rate, st.Volume, voiceConfigVersion);
+        }
+        catch (Exception) { }
+    }
+
+    static List<string> VoiceNames(IntPtr b)
+    {
+        var names = new List<string>();
+        try
+        {
+            if (prism_backend_count_voices(b, out var count) != Ok) return names;
+            for (ulong i = 0; i < count.ToUInt64(); i++)
+                names.Add(prism_backend_get_voice_name(b, (UIntPtr)i, out var p) == Ok && p != IntPtr.Zero
+                    ? Marshal.PtrToStringUTF8(p) ?? "" : "");
+        }
+        catch (Exception) { }
+        return names;
+    }
+
+    /// <summary>The Windows voices to choose from, for Settings.</summary>
+    public static List<string> WindowsVoices()
+    {
+        if (!Load()) return new List<string>();
+        foreach (var id in new[] { OneCore, Sapi })
+        {
+            if (kept.TryGetValue(id, out var k)) return VoiceNames(k).Where(n => n.Length > 0).Distinct().ToList();
+            IntPtr b = IntPtr.Zero;
+            try
+            {
+                if (!prism_registry_exists(context, id)) continue;
+                b = prism_registry_acquire(context, id);
+                if (b == IntPtr.Zero) continue;
+                var init = prism_backend_initialize(b);
+                if (init != Ok && init != AlreadyInitialized) continue;
+                kept[id] = b;
+                b = IntPtr.Zero;
+                return VoiceNames(kept[id]).Where(n => n.Length > 0).Distinct().ToList();
+            }
+            catch (Exception) { }
+            finally { if (b != IntPtr.Zero) { try { prism_backend_free(b); } catch (Exception) { } } }
+        }
+        return new List<string>();
+    }
 
     static IntPtr context;
     static bool failed;
@@ -85,6 +168,7 @@ public static class Prism
                     var init = prism_backend_initialize(b);           // fails for a reader that isn't running
                     if (init != Ok && init != AlreadyInitialized) continue;
                 }
+                if (keep) ApplyVoiceConfig(id, b);
                 var features = prism_backend_get_features(b);
                 if (needRunning && (features & SupportedAtRuntime) == 0) continue;
                 var r = (features & SupportsOutput) != 0
@@ -164,7 +248,7 @@ public sealed class Announcer
     };
 
     readonly AppSettings settings;
-    public Announcer(AppSettings settings) { this.settings = settings; }
+    public Announcer(AppSettings settings) { this.settings = settings; PushVoice(); }
 
     public Method SpeakWith
     {
@@ -186,6 +270,37 @@ public sealed class Announcer
     {
         get => settings.GetBool("announcementsMuted");
         set => settings.Set("announcementsMuted", value);
+    }
+
+    /// <summary>The Windows voice by name, or null for Windows' default (Settings, Time and language, Speech).</summary>
+    public string? VoiceName
+    {
+        get => settings.GetString("windowsVoiceName") is { Length: > 0 } v ? v : null;
+        set { settings.Set("windowsVoiceName", value ?? ""); PushVoice(); }
+    }
+
+    public static readonly string[] SpeedTitles = { "Windows speed", "Slow", "Normal", "Fast", "Very fast" };
+    /// <summary>0 = Windows' own speed, 1 slow, 2 normal, 3 fast, 4 very fast.</summary>
+    public int Speed
+    {
+        get => Math.Clamp(settings.GetInt("windowsVoiceSpeed") ?? 0, 0, 4);
+        set { settings.Set("windowsVoiceSpeed", Math.Clamp(value, 0, 4)); PushVoice(); }
+    }
+
+    /// <summary>Loudness of the Windows voice, 25 to 100 percent.</summary>
+    public int VolumePercent
+    {
+        get => Math.Clamp(settings.GetInt("windowsVoiceVolume") ?? 100, 25, 100);
+        set { settings.Set("windowsVoiceVolume", Math.Clamp(value, 25, 100)); PushVoice(); }
+    }
+
+    public void PushVoice() => Prism.SetVoiceConfig(VoiceName, Speed, VolumePercent);
+
+    /// <summary>Say a sample in the Windows voice with the chosen settings.</summary>
+    public void Sample()
+    {
+        PushVoice();
+        Prism.ToWindowsVoice("Upper: Dr. L.S., F00", true);
     }
 
     /// <summary>Test and self-test hook: when set, nothing is spoken; text goes here instead.</summary>

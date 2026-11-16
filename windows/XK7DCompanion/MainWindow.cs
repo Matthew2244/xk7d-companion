@@ -92,6 +92,28 @@ public sealed class MainWindow : Window
         var help = new MenuItem { Header = "_Help" };
         help.Items.Add(Item(HelpCmd));
         help.Items.Add(Item(UpdatesCmd));
+        help.Items.Add(new Separator());
+        var logItem = new MenuItem { Header = "Keep a _MIDI Log", IsCheckable = true };
+        logItem.Click += (_, _) =>
+        {
+            model.MidiLog.IsOn = !model.MidiLog.IsOn;
+            logItem.IsChecked = model.MidiLog.IsOn;
+            model.Announcer.Announce(model.MidiLog.IsOn ? "MIDI log on. Help, Show MIDI Log in Explorer finds the file." : "MIDI log off.", force: true);
+        };
+        help.Items.Add(logItem);
+        var showLog = new MenuItem { Header = "Show MIDI Log in E_xplorer" };
+        showLog.Click += (_, _) =>
+        {
+            try
+            {
+                if (File.Exists(MidiLogFile.FilePath))
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{MidiLogFile.FilePath}\"");
+                else model.Announcer.Announce("There's no MIDI log yet. Choose Help, Keep a MIDI Log first.", force: true);
+            }
+            catch (Exception) { }
+        };
+        help.Items.Add(showLog);
+        help.SubmenuOpened += (_, _) => logItem.IsChecked = model.MidiLog.IsOn;
         var about = new MenuItem { Header = "_About XK-7D Companion" };
         about.Click += (_, _) => ShowAbout();
         help.Items.Add(about);
@@ -493,11 +515,13 @@ public sealed class MainWindow : Window
         {
             "There are two ways to use this app. Play the organ and the app says each change you make. Or change settings here, and they go straight to the organ. You can mix the two.",
             "Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ list and press Enter. Then choose Organ, Set Up Organ for This App (Control Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that. If another program has the organ's MIDI port open, close it first.",
-            "Playing: changes are spoken name first, for example \"Upper 8 foot: 6\". A drawbar or knob is spoken once, when you stop moving it. When many settings change at once, such as calling up a patch, you hear the first and how many others changed. Control Shift L repeats the last announcement, and Control Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.",
-            "Control W minimizes this window and the app keeps listening. The app never sends anything to the organ unless you change something here.",
+            "Playing: changes are spoken name first, for example \"Upper 8 foot: 6\". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: \"Upper: Kinda Brian, F15\". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Control Shift L repeats the last announcement, and Control Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.",
+            "Control W minimizes this window and the app keeps listening. The app sends nothing to the organ unless you change something here, apart from asking for a User patch's name.",
+            "Speech: with a screen reader running, the app speaks through it. Without one, it uses the Windows voice; Settings has the voice, speed and loudness, and Control Shift M mutes.",
             "Changing settings here: Control F searches, Control L goes to the list. Each row reads name and value; \"not heard yet\" means the organ hasn't reported it. Tab reaches the editor. A slider or typed value is sent at once. In a list of choices, such as Organ Type, the arrow keys move without sending anything. Press Enter to send the one you're on, and the app says what it sent. Escape puts back what was there.",
             "If the organ seems silent: check Set Up Organ has been sent since the last MIDI template, that the organ is chosen in the Organ list, that the app isn't muted, and try with External Zones off.",
             "Other keys: Control R read from organ, Control S save the last organ snapshot, Control 2 the simulator, Control comma Settings, Control U check for updates, F1 this help, Alt F4 quit.",
+            "MIDI log: Help, Keep a MIDI Log writes everything sent to and from the organ to a file (notes and the expression pedal are only counted). Help, Show MIDI Log in Explorer finds it, to send to the developer.",
         }), "XK-7D Companion Help");
     }
 }

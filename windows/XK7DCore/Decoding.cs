@@ -67,6 +67,8 @@ public sealed class AnnouncementCoalescer
         public required string Text;
         public double FirstAt, LastAt;
         public int Order;
+        /// <summary>Not spoken before this time (a patch change waiting for its name), unless released.</summary>
+        public double? HeldUntil;
     }
 
     readonly Dictionary<string, Pending> pending = new();
@@ -76,12 +78,27 @@ public sealed class AnnouncementCoalescer
 
     public bool IsEmpty => pending.Count == 0;
 
-    public void Submit(string key, string text, double now)
+    public void Submit(string key, string text, double now, double? holdUntil = null)
     {
         counter++;
-        if (pending.TryGetValue(key, out var p)) { p.Text = text; p.LastAt = now; p.Order = counter; }
-        else pending[key] = new Pending { Text = text, FirstAt = now, LastAt = now, Order = counter };
+        if (pending.TryGetValue(key, out var p)) { p.Text = text; p.LastAt = now; p.Order = counter; p.HeldUntil = holdUntil; }
+        else pending[key] = new Pending { Text = text, FirstAt = now, LastAt = now, Order = counter, HeldUntil = holdUntil };
     }
+
+    /// <summary>Change the text of something still waiting and stop holding it, keeping its place and
+    /// timing. False if it has already been spoken.</summary>
+    public bool Release(string key, string text)
+    {
+        if (!pending.TryGetValue(key, out var p)) return false;
+        p.Text = text;
+        p.HeldUntil = null;
+        return true;
+    }
+
+    /// <summary>Whether something is waiting under a key.</summary>
+    public bool IsPending(string key) => pending.ContainsKey(key);
+
+    static bool Held(Pending p, double now) => p.HeldUntil is { } h && now < h;
 
     /// <summary>Drop anything waiting under a key (for example, when it turned out to be our own echo).</summary>
     public void Cancel(string key) => pending.Remove(key);
@@ -95,6 +112,7 @@ public sealed class AnnouncementCoalescer
             var newest = pending.Values.Max(p => p.LastAt);
             var oldest = pending.Values.Min(p => p.FirstAt);
             if (!(now - newest >= Settle || now - oldest >= MaxWait)) return new List<string>();
+            if (pending.Values.Any(p => Held(p, now))) return new List<string>();
             var texts = pending.Values.OrderBy(p => p.Order).Select(p => p.Text).ToList();
             pending.Clear();
             return new List<string> { Summary(texts) };
@@ -102,7 +120,7 @@ public sealed class AnnouncementCoalescer
         var ready = new List<(int, string)>();
         foreach (var (key, p) in pending.ToList())
         {
-            if (now - p.LastAt >= Settle || now - p.FirstAt >= MaxWait)
+            if (!Held(p, now) && (now - p.LastAt >= Settle || now - p.FirstAt >= MaxWait))
             {
                 ready.Add((p.Order, p.Text));
                 pending.Remove(key);

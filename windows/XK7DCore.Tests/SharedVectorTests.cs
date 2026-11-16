@@ -165,6 +165,80 @@ public class SharedVectorTests
         }
     }
 
+    [Fact]
+    public void PatchNamesAnnouncementsAndDumpsMatch()
+    {
+        var factory = V.GetProperty("factoryPatchNames").EnumerateArray().ToList();
+        Assert.Equal(100, factory.Count);
+        for (var i = 0; i < 100; i++)
+        {
+            Assert.Equal(Str(factory[i][0]), PatchNames.FactoryUpper[i]);
+            Assert.Equal(Str(factory[i][1]), PatchNames.FactoryLower[i]);
+            Assert.Equal(Str(factory[i][2]), PatchNames.Spoken(PatchNames.FactoryUpper[i]));
+            Assert.Equal(Str(factory[i][3]), PatchNames.Spoken(PatchNames.FactoryLower[i]));
+        }
+        var cases = new (int? Bank, int Program)[] { (1, 0), (1, 21), (1, 99), (0, 5), (0x65, 0x69), (null, 0x7E), (2, 3) };
+        var rows = V.GetProperty("patchAnnouncements").EnumerateArray().ToList();
+        var r = 0;
+        foreach (var part in new[] { "Upper", "Lower", "Pedal" })
+            foreach (var (bank, program) in cases)
+            {
+                var row = rows[r++];
+                var desc = PatchSelect.Describe(bank, program);
+                Assert.Equal(Str(row[0]), part);
+                Assert.Equal(Str(row[1]), desc);
+                Assert.Equal(Str(row[2]), PatchNames.FactoryName(part, bank, program) ?? "");
+                Assert.Equal(Str(row[3]), PatchNames.IsLookupSlot(bank, program) ? "lookup" : "");
+                Assert.Equal(Str(row[4]), PatchNames.Announcement(part, desc, null));
+                Assert.Equal(Str(row[5]), PatchNames.Announcement(part, desc, "Jazz 8\u00B4 Lead"));
+            }
+        Assert.Equal(rows.Count, r);
+        foreach (var d in V.GetProperty("dumpNames").EnumerateArray())
+        {
+            var found = PatchNames.FromTemporaryDump(Bytes(Str(d[0])));
+            if (d[1].ValueKind == JsonValueKind.Null) Assert.Null(found);
+            else
+            {
+                Assert.NotNull(found);
+                Assert.Equal(Str(d[1][0]), found!.Value.Upper);
+                Assert.Equal(Str(d[1][1]), found!.Value.Lower);
+            }
+        }
+        foreach (var c in V.GetProperty("cleanNames").EnumerateArray())
+            Assert.Equal(Str(c[1]), PatchNames.Clean(Str(c[0])));
+    }
+
+    [Fact]
+    public void SpokenLinesMatchForEverySetting()
+    {
+        var count = 0;
+        foreach (var l in V.GetProperty("lines").EnumerateArray())
+        {
+            var p = Db.ParameterById(Str(l[0]))!;
+            var st = new Setting(p, p.Indices.Select(d => d.Options[0].Raw).ToArray());
+            Assert.Equal(Str(l[1]), OrganSession.Line(st, p.RawMin));
+            Assert.Equal(Str(l[2]), OrganSession.Line(st, p.RawMax));
+            count++;
+        }
+        Assert.True(count > 500, $"only {count}");
+    }
+
+    [Fact]
+    public void MidiLogLinesMatch()
+    {
+        var stream = Bytes("B0 00 00 B0 20 00 C0 05 90 3C 64 80 3C 00 FE B0 0B 40 B0 0E 60 B0 63 12 B0 62 0A B0 06 01");
+        var full = stream.Concat(XK7SysEx.DumpRequest(0, DumpType.Temporary))
+            .Concat(XK7SysEx.DataSet(0, Db.SettingAt(new Address(0, 0, 0x10, 0, 0))!, "Gospel"))
+            .Concat(XK7SysEx.DataPacket(0, 7, 2, Enumerable.Repeat((byte)0x41, 64).ToArray()))
+            .Concat(XK7SysEx.Acknowledge(0, 7, 0, 2))
+            .Concat(XK7SysEx.IdentityRequest(0x7F)).Concat(XK7SysEx.IdentityReply(3))
+            .Concat(Bytes("F0 55 00 10 26 02 02 F7 F0 01 02 F7 B2 5C 7F E0 00 40 B1 01 1E")).ToArray();
+        var logger = new MidiLogger(Db);
+        var lines = logger.Lines(true, full.Take(13).ToArray()).Concat(logger.Lines(true, full.Skip(13).ToArray()))
+            .Concat(logger.Lines(false, full)).ToList();
+        Assert.Equal(V.GetProperty("midiLog").EnumerateArray().Select(Str).ToList(), lines);
+    }
+
     /// <summary>Not in the shared file (too many to list): every address of every indexed family, all
     /// 671,144 of them, looks back up to itself.</summary>
     [Fact]

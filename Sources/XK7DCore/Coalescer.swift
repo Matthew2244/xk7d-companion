@@ -19,6 +19,8 @@ public final class AnnouncementCoalescer {
         var firstAt: TimeInterval
         var lastAt: TimeInterval
         var order: Int
+        /// Not spoken before this time (a patch change waiting for its name), unless released.
+        var heldUntil: TimeInterval?
     }
 
     private var pending: [String: Pending] = [:]
@@ -31,16 +33,36 @@ public final class AnnouncementCoalescer {
 
     public var isEmpty: Bool { pending.isEmpty }
 
-    public func submit(key: String, text: String, at now: TimeInterval) {
+    public func submit(key: String, text: String, at now: TimeInterval, holdUntil: TimeInterval? = nil) {
         counter += 1
         if var p = pending[key] {
             p.text = text
             p.lastAt = now
             p.order = counter
+            p.heldUntil = holdUntil
             pending[key] = p
         } else {
-            pending[key] = Pending(text: text, firstAt: now, lastAt: now, order: counter)
+            pending[key] = Pending(text: text, firstAt: now, lastAt: now, order: counter, heldUntil: holdUntil)
         }
+    }
+
+    /// Change the text of something still waiting and stop holding it, keeping its place and its
+    /// timing (a patch change whose name has just arrived). False if it has already been spoken.
+    @discardableResult
+    public func release(key: String, text: String) -> Bool {
+        guard var p = pending[key] else { return false }
+        p.text = text
+        p.heldUntil = nil
+        pending[key] = p
+        return true
+    }
+
+    /// Whether something is waiting under a key.
+    public func isPending(key: String) -> Bool { pending[key] != nil }
+
+    private func held(_ p: Pending, _ now: TimeInterval) -> Bool {
+        guard let h = p.heldUntil else { return false }
+        return now < h
     }
 
     /// Drop anything waiting under a key (for example, when the change turned out to be our own echo).
@@ -53,13 +75,14 @@ public final class AnnouncementCoalescer {
             let newest = pending.values.map(\.lastAt).max() ?? now
             let oldest = pending.values.map(\.firstAt).min() ?? now
             guard now - newest >= settle || now - oldest >= maxWait else { return [] }
+            guard !pending.values.contains(where: { held($0, now) }) else { return [] }
             let texts = pending.values.sorted { $0.order < $1.order }.map(\.text)
             pending.removeAll()
             return [Self.summary(texts)]
         }
         var ready: [(Int, String)] = []
         for (key, p) in pending {
-            if now - p.lastAt >= settle || now - p.firstAt >= maxWait {
+            if !held(p, now), now - p.lastAt >= settle || now - p.firstAt >= maxWait {
                 ready.append((p.order, p.text))
                 pending[key] = nil
             }

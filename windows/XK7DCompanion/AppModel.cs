@@ -12,6 +12,7 @@ public sealed class AppModel
     public OrganSession Session { get; }
     public AppSettings Settings { get; }
     public Announcer Announcer { get; }
+    public MidiLogFile MidiLog { get; }
     readonly Dispatcher dispatcher;
     readonly WinMidiConnection connection;
     public PortChoice Choice { get; private set; } = PortChoice.NotConnected;
@@ -35,6 +36,7 @@ public sealed class AppModel
         Settings = settings;
         this.dispatcher = dispatcher;
         Announcer = new Announcer(settings);
+        MidiLog = new MidiLogFile(settings);
         var settle = settings.GetInt("settleMilliseconds") ?? 350;
         Session = new OrganSession(coalescer: new AnnouncementCoalescer(settle / 1000.0, 2.0));
         var a = new OrganAddressing();
@@ -51,7 +53,22 @@ public sealed class AppModel
             HistoryChanged?.Invoke();
         };
         Session.OnAnnouncement = text => Announcer.Announce(text);
-        Session.OnEvent = (e, _) => ValuesChanged?.Invoke(e);
+        // The Leslie speed cuts in at once.
+        Session.OnUrgentAnnouncement = text => Announcer.Announce(text);
+        Session.OnMidi = (incoming, bytes) => MidiLog.Midi(incoming, bytes);
+        Session.OnNameNote = MidiLog.Note;
+        Session.AskOrganForPatchNames = !settings.Has("askOrganForPatchNames") || settings.GetBool("askOrganForPatchNames");
+        Session.OnNrpnModeNoticed = () =>
+        {
+            if (Choice is PortChoice.Simulator) return;
+            MidiLog.Note("The organ is sending NRPN, not SysEx");
+            Announcer.Announce("The organ is in NRPN mode, so custom settings such as pedal registration and patch names aren't sent. Organ menu, Set Up Organ for This App, fixes that.", polite: true);
+        };
+        Session.OnEvent = (e, _) =>
+        {
+            if (e is OrganEvent.UnknownAddress u) MidiLog.Note($"Not in the app's table: address {u.Address}");
+            ValuesChanged?.Invoke(e);
+        };
         Session.OnChannelMismatch = channel =>
         {
             var mine = Session.Addressing.UpperChannel + 1;
@@ -143,6 +160,7 @@ public sealed class AppModel
         loopback = null;
         Session.Output = null;
         Choice = c;
+        MidiLog.Note($"Port: {c}");
         switch (c)
         {
             case PortChoice.None:

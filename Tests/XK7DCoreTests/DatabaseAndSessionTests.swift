@@ -218,13 +218,13 @@ final class OrganSessionTests: XCTestCase {
         // A different value is not an echo.
         session.receive([0xB0, 0x06, 0x00])
         advance(1)
-        XCTAssertEqual(spoken, ["Percussion on: Off"])
+        XCTAssertEqual(spoken, ["Percussion off"])
         // And the same value much later is a real change.
         session.set(s, raw: 1)
         now += 10
         session.receive([0xB0, 0x63, 0x11, 0x62, 0x00, 0x06, 0x01])
         advance(1)
-        XCTAssertEqual(spoken.last, "Percussion on: On")
+        XCTAssertEqual(spoken.last, "Percussion on")
     }
 
     func testDrawbarCCAndRegistrationSpeakOnce() {
@@ -244,8 +244,10 @@ final class OrganSessionTests: XCTestCase {
         session.receive([0xB0, 0x00, 0x01, 0xB0, 0x20, 0x00, 0xC0, 0x0F])
         session.receive([0xB1, 0x00, 0x65, 0xC1, 0x69])
         session.receive([0xC2, 0x7F])
-        advance(0.4)
-        XCTAssertEqual(spoken, ["Upper: patch F15", "Lower: Favorite C sharp-F", "Pedal: Adjust B"])
+        // Factory patches are named from the manual's table at once; the Favorite waits for a name
+        // from the organ, which doesn't come here, so it's said by slot after the wait (last).
+        for _ in 0..<30 { advance(0.05) }
+        XCTAssertEqual(spoken, ["Upper: Kinda Brian, F15", "Pedal: Adjust B", "Lower: Favorite C sharp-F"])
     }
 
     func testControllersAndLeslieSpeed() {
@@ -258,7 +260,7 @@ final class OrganSessionTests: XCTestCase {
         // Percussion On, Harmonic, Fast Decay in one Data Set starting at 11 00.
         session.receive([0xF0, 0x55, 0, 0x10, 0x26, 0x13, 0, 0, 0, 0x11, 0x00, 1, 1, 0, 0xF7])
         advance(0.4)
-        XCTAssertEqual(spoken, ["Percussion on: On", "Percussion harmonic: Third", "Percussion decay: Slow"])
+        XCTAssertEqual(spoken, ["Percussion on", "Percussion harmonic: Third", "Percussion decay: Slow"])
     }
 
     func testNamesAndUnknownAddresses() {
