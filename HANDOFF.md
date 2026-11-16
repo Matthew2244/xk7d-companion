@@ -2,7 +2,8 @@
 
 Version 1.1.0 added a Windows version, and updates through Sparkle on the Mac
 and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1".
-1.2.0 answers the first report from a real XK-7D; see "Changes in 1.2.0". Both versions have been tested against the
+1.2.0 answers the first report from a real XK-7D; see "Changes in 1.2.0".
+1.2.1 adds a switch for drawbar speech; see "Changes in 1.2.1". Both versions have been tested against the
 built-in simulator only. Neither has been connected to a real XK-7D. The
 Windows version has been built and tested on GitHub's Windows runners, and
 nobody has used it yet with a screen reader on a real PC.
@@ -540,6 +541,20 @@ might never answer and must still get your changes.
 The Developer ID comes from the Keychain, and the App Store Connect key from
 the Keychain entry `asc-api-key`. Nothing secret is in the repository or on
 GitHub.
+
+## Changes in 1.2.1
+
+Matthew asked to be able to turn off speech for drawbar moves only.
+`OrganSession.speakDrawbars` (C# `SpeakDrawbars`), default on, saved as
+`speakDrawbars`. Off, drawbar control changes and the drawbar registration
+settings (00 00 01 0p 0n), on Upper, Lower and Pedal, are still tracked and
+shown but not said; anything already waiting is dropped
+(`AnnouncementCoalescer.cancel(keyPrefix:)`). Announcements menu, Speak
+Drawbar Changes, Command Shift D (Control Shift D), says "Drawbar speech
+off" or "on" even when muted. Also a checkbox in Settings. One switch, not
+a set of categories: Leslie, patches and the rest stay on, and Mute covers
+everything. Tests: `testDrawbarSpeechCanBeTurnedOff` in both languages.
+Swift 132 unit and 5 integration; C# 151.
 
 ## Changes in 1.2.0 (first real-organ report)
 

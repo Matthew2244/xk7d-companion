@@ -103,6 +103,15 @@ public sealed class OrganSession
     /// <summary>The shortest gap between two value changes sent to the organ.</summary>
     public double MinimumSendGap { get; set; } = 0.02;
 
+    bool speakDrawbars = true;
+    /// <summary>Speak drawbar moves (Upper, Lower and Pedal, as control changes or as registration
+    /// settings). Off, they're still tracked and shown, only not said. Turning it off drops any waiting.</summary>
+    public bool SpeakDrawbars
+    {
+        get => speakDrawbars;
+        set { speakDrawbars = value; if (!value) Coalescer.CancelPrefix("drawbar."); }
+    }
+
     /// <summary>Ask the organ for a User patch's or Favorite's name with a Temporary dump when it
     /// doesn't send one (see HANDOFF.md).</summary>
     public bool AskOrganForPatchNames { get; set; } = true;
@@ -388,7 +397,7 @@ public sealed class OrganSession
             drawbars[key] = level;
             var echo = IsRecent(sentDrawbars.TryGetValue(key, out var sd) ? (sd.Level == level, sd.At) : null);
             Emit(new OrganEvent.Drawbar(d.Part, d.Index, level), $"drawbar.{key}",
-                 $"{d.Part.Raw()} {DrawbarCC.FootageName(d.Part, d.Index)}: {level}", echo);
+                 SpeakDrawbars ? $"{d.Part.Raw()} {DrawbarCC.FootageName(d.Part, d.Index)}: {level}" : null, echo);
             // Keep the registration setting in step with the drawbar.
             if (RegistrationSetting(d.Part, d.Index) is { } reg) values[reg.Address] = level;
             return;
@@ -503,7 +512,8 @@ public sealed class OrganSession
             if (!echo) SpeakUrgently(rotor);
             return;
         }
-        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), Line(s, raw), echo);
+        var quiet = !SpeakDrawbars && DrawbarKey(s) is not null;
+        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), quiet ? null : Line(s, raw), echo);
     }
 
     /// <summary>What is said for a setting's new value. An Off/On setting is "Percussion on", not "Percussion on: On".</summary>

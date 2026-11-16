@@ -109,6 +109,9 @@ A few things make it easier to follow while you play:
   bottom of the main window.
 - **Need quiet?** Command Shift M (Control Shift M) mutes and unmutes the
   announcements. The app keeps listening and keeps its list up to date.
+- **Quiet drawbars only:** Command Shift D (Control Shift D) turns drawbar
+  speech off and on, for all three parts, and says which. Everything else is
+  still spoken. It's also in Settings, "Speak drawbar changes".
 
 The app mostly listens. It sends nothing to the organ unless you change
 something in the app or choose Set Up Organ, with one exception: when you

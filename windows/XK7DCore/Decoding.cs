@@ -95,6 +95,12 @@ public sealed class AnnouncementCoalescer
         return true;
     }
 
+    /// <summary>Drop everything waiting under keys that start with this (all drawbars, say).</summary>
+    public void CancelPrefix(string keyPrefix)
+    {
+        foreach (var k in pending.Keys.Where(k => k.StartsWith(keyPrefix, StringComparison.Ordinal)).ToList()) pending.Remove(k);
+    }
+
     /// <summary>Whether something is waiting under a key.</summary>
     public bool IsPending(string key) => pending.ContainsKey(key);
 

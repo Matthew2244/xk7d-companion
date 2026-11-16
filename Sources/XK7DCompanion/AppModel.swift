@@ -55,6 +55,7 @@ final class AppModel {
             self.announcer.announce("The organ is in NRPN mode, so custom settings such as pedal registration and patch names aren't sent. Organ menu, Set Up Organ for This App, fixes that.", polite: true)
         }
         session.askOrganForPatchNames = d.object(forKey: "askOrganForPatchNames") as? Bool ?? true
+        session.speakDrawbars = d.object(forKey: "speakDrawbars") as? Bool ?? true
         session.onEvent = { [weak self] event, _ in self?.eventArrived(event) }
         session.onChannelMismatch = { [weak self] channel in
             guard let self else { return }
@@ -248,6 +249,14 @@ final class AppModel {
         }
         session.set(setting, text: text)
         NotificationCenter.default.post(name: .organValuesChanged, object: nil)
+    }
+
+    /// Turn drawbar speech on or off, remember it, and say the new state (even when muted).
+    func toggleDrawbarSpeech() {
+        session.speakDrawbars.toggle()
+        UserDefaults.standard.set(session.speakDrawbars, forKey: "speakDrawbars")
+        announcer.announce(session.speakDrawbars ? "Drawbar speech on" : "Drawbar speech off", force: true)
+        NotificationCenter.default.post(name: .connectionChanged, object: nil)
     }
 
     func repeatLast() {

@@ -129,7 +129,7 @@ public sealed class SettingsWindow : Window
 {
     readonly AppModel model;
     readonly ComboBox methodBox, settleBox, deviceBox, voiceBox, speedBox, volumeBox;
-    readonly CheckBox namesBox;
+    readonly CheckBox namesBox, drawbarBox;
     List<string> voices = new();
     static readonly int[] Volumes = { 100, 75, 50, 25 };
     readonly List<ComboBox> channelBoxes = new();
@@ -164,6 +164,10 @@ public sealed class SettingsWindow : Window
         foreach (var ms in SettleChoices) settleBox.Items.Add(ms.ToString());
         settleBox.SelectionChanged += (_, _) => Changed();
         panel.Children.Add(Ui.Row(Ui.LabelFor("Wait before speaking, milliseconds:", settleBox), settleBox));
+        drawbarBox = new CheckBox { Content = "Speak drawbar changes", Margin = new Thickness(0, 4, 0, 4) }
+            .Named("Speak drawbar changes", "Off keeps quiet about drawbars on all three parts, and still speaks everything else. Control Shift D switches it.");
+        drawbarBox.Click += (_, _) => Changed();
+        panel.Children.Add(drawbarBox);
         namesBox = new CheckBox { Content = "Ask the organ for User patch names", Margin = new Thickness(0, 4, 0, 4) }
             .Named("Ask the organ for User patch names", "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.");
         namesBox.Click += (_, _) => Changed();
@@ -209,6 +213,7 @@ public sealed class SettingsWindow : Window
         speedBox.SelectedIndex = model.Announcer.Speed;
         volumeBox.SelectedIndex = Math.Max(Array.IndexOf(Volumes, model.Announcer.VolumePercent), 0);
         namesBox.IsChecked = model.Session.AskOrganForPatchNames;
+        drawbarBox.IsChecked = model.Session.SpeakDrawbars;
         var settle = (int)Math.Round(model.Session.Coalescer.Settle * 1000);
         settleBox.SelectedIndex = Array.IndexOf(SettleChoices, SettleChoices.MinBy(c => Math.Abs(c - settle)));
         var a = model.Session.Addressing;
@@ -224,6 +229,7 @@ public sealed class SettingsWindow : Window
         if (deviceBox.IsKeyboardFocusWithin && deviceBox.IsDropDownOpen) return;
         updating = true;
         deviceBox.SelectedIndex = model.Session.Addressing.DeviceId;
+        drawbarBox.IsChecked = model.Session.SpeakDrawbars;
         updating = false;
     }
 
@@ -234,6 +240,11 @@ public sealed class SettingsWindow : Window
         model.Announcer.VoiceName = voiceBox.SelectedIndex > 0 && voiceBox.SelectedIndex <= voices.Count ? voices[voiceBox.SelectedIndex - 1] : null;
         model.Announcer.Speed = Math.Max(speedBox.SelectedIndex, 0);
         model.Announcer.VolumePercent = Volumes[Math.Max(volumeBox.SelectedIndex, 0)];
+        if (model.Session.SpeakDrawbars != (drawbarBox.IsChecked == true))
+        {
+            model.Session.SpeakDrawbars = drawbarBox.IsChecked == true;
+            model.Settings.Set("speakDrawbars", model.Session.SpeakDrawbars);
+        }
         model.Session.AskOrganForPatchNames = namesBox.IsChecked == true;
         model.Settings.Set("askOrganForPatchNames", model.Session.AskOrganForPatchNames);
         var settle = SettleChoices[Math.Max(settleBox.SelectedIndex, 0)];

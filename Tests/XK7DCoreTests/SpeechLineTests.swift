@@ -64,6 +64,22 @@ final class SpeechLineTests: XCTestCase {
         XCTAssertEqual(line(Address(0, 0, 0, 0x10, 0x04), 1), "Organ type: Mellow")
     }
 
+    func testDrawbarSpeechCanBeTurnedOff() {
+        session.receive([0xB0, 14, 0x60])                       // Upper 8' as a CC
+        session.speakDrawbars = false                            // turned off while it waits: dropped
+        session.receive([0xB0, 0x23, 0x7F])                      // Pedal 8' as a CC
+        session.receive([0xF0, 0x55, 0, 0x10, 0x26, 0x13, 0, 0, 1, 2, 3, 5, 0xF7])   // Lower 4' as SysEx
+        nrpn(0x11, 0x00, 1)                                      // percussion is still said
+        now += 1; session.tick()
+        XCTAssertEqual(spoken, ["Percussion on"])
+        XCTAssertEqual(session.drawbars["Pedal.1"], 8, "still tracked")
+        XCTAssertEqual(session.value(of: session.registrationSetting(part: .lower, index: 3)!), 5)
+        session.speakDrawbars = true
+        session.receive([0xB0, 14, 0x20])
+        now += 1; session.tick()
+        XCTAssertEqual(spoken.last, "Upper 8 foot: 2")
+    }
+
     func testOrganInNRPNModeIsNoticedOnce() {
         var told = 0
         session.onNRPNModeNoticed = { told += 1 }

@@ -130,6 +130,7 @@ final class SettingsWindowController: NSWindowController {
     private let speedPopup = NSPopUpButton()
     private let volumePopup = NSPopUpButton()
     private let sampleButton = NSButton(title: "Say a Sample", target: nil, action: nil)
+    private let drawbarCheckbox = NSButton(checkboxWithTitle: "Speak drawbar changes", target: nil, action: nil)
     private let namesCheckbox = NSButton(checkboxWithTitle: "Ask the organ for User patch names", target: nil, action: nil)
     private var voices: [(id: String, title: String)] = []
     private static let volumes = [100, 75, 50, 25]
@@ -151,6 +152,7 @@ final class SettingsWindowController: NSWindowController {
 
     /// Show a Device ID learned from the organ while this window is open (unless it's being typed in).
     @objc private func deviceIDMayHaveChanged() {
+        drawbarCheckbox.state = model.session.speakDrawbars ? .on : .off
         guard deviceField.currentEditor() == nil else { return }
         let id = Int(model.session.addressing.deviceID)
         deviceField.integerValue = id
@@ -189,6 +191,8 @@ final class SettingsWindowController: NSWindowController {
         help(volumePopup, "Loudness", "How loud the Mac's voice is, compared with other sound. VoiceOver keeps its own volume.")
         sampleButton.target = self; sampleButton.action = #selector(saySample)
         help(sampleButton, "Say a Sample", "Says a patch change in the chosen voice, speed and loudness.")
+        drawbarCheckbox.target = self; drawbarCheckbox.action = #selector(changed)
+        help(drawbarCheckbox, "Speak drawbar changes", "Off keeps quiet about drawbars on all three parts, and still speaks everything else. Command Shift D switches it.")
         namesCheckbox.target = self; namesCheckbox.action = #selector(changed)
         help(namesCheckbox, "Ask the organ for User patch names",
              "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.")
@@ -219,6 +223,7 @@ final class SettingsWindowController: NSWindowController {
             hrow(makeLabel("Voice:"), voicePopup),
             hrow(makeLabel("Speed:"), speedPopup, makeLabel("Loudness:"), volumePopup, sampleButton),
             hrow(makeLabel("Wait before speaking, milliseconds:"), settleField, settleStepper),
+            drawbarCheckbox,
             namesCheckbox,
             makeLabel("MIDI", bold: true),
             hrow(makeLabel("Organ device ID:"), deviceField, deviceStepper),
@@ -263,6 +268,7 @@ final class SettingsWindowController: NSWindowController {
         speedPopup.selectItem(at: Announcer.Speed.allCases.firstIndex(of: model.announcer.speed) ?? 0)
         volumePopup.selectItem(at: Self.volumes.firstIndex(of: model.announcer.volumePercent) ?? 0)
         namesCheckbox.state = model.session.askOrganForPatchNames ? .on : .off
+        drawbarCheckbox.state = model.session.speakDrawbars ? .on : .off
         let settle = Int((model.session.coalescer.settle * 1000).rounded())
         settleStepper.integerValue = settle
         settleField.integerValue = settle
@@ -295,6 +301,10 @@ final class SettingsWindowController: NSWindowController {
         if voices.indices.contains(voicePopup.indexOfSelectedItem) { model.announcer.voiceIdentifier = voices[voicePopup.indexOfSelectedItem].id }
         model.announcer.speed = Announcer.Speed.allCases[max(speedPopup.indexOfSelectedItem, 0)]
         model.announcer.volumePercent = Self.volumes[max(volumePopup.indexOfSelectedItem, 0)]
+        if model.session.speakDrawbars != (drawbarCheckbox.state == .on) {
+            model.session.speakDrawbars = drawbarCheckbox.state == .on
+            UserDefaults.standard.set(model.session.speakDrawbars, forKey: "speakDrawbars")
+        }
         model.session.askOrganForPatchNames = namesCheckbox.state == .on
         UserDefaults.standard.set(model.session.askOrganForPatchNames, forKey: "askOrganForPatchNames")
         let settle = min(max(settleField.integerValue, 100), 2000)

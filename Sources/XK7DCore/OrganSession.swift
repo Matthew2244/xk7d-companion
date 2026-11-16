@@ -95,6 +95,12 @@ public final class OrganSession {
     /// setting are merged, latest value wins, so a fast slider sweep cannot flood the organ.
     public var minimumSendGap: TimeInterval = 0.02
 
+    /// Speak drawbar moves (Upper, Lower and Pedal, as control changes or as registration settings).
+    /// Off, they're still tracked and shown, only not said. Turning it off drops any waiting.
+    public var speakDrawbars = true {
+        didSet { if !speakDrawbars { coalescer.cancel(keyPrefix: "drawbar.") } }
+    }
+
     /// When a User patch or a Favorite is chosen and the organ doesn't send its name by itself,
     /// ask for it with a Temporary dump and read the name out of that (see HANDOFF.md).
     public var askOrganForPatchNames = true
@@ -360,7 +366,8 @@ public final class OrganSession {
             drawbars[key] = level
             let echo = isRecent(sentDrawbars[key].map { ($0.level == level, $0.at) })
             emit(.drawbar(part: d.part, index: d.index, level: level), key: "drawbar.\(key)",
-                 text: "\(d.part.rawValue) \(DrawbarCC.footageName(part: d.part, index: d.index)): \(level)", echo: echo)
+                 text: speakDrawbars ? "\(d.part.rawValue) \(DrawbarCC.footageName(part: d.part, index: d.index)): \(level)" : nil,
+                 echo: echo)
             // Keep the registration setting in step with the drawbar.
             if let s = registrationSetting(part: d.part, index: d.index) { values[s.address] = level }
             return
@@ -465,7 +472,8 @@ public final class OrganSession {
             if !echo { speakUrgently(rotor) }
             return
         }
-        emit(.value(s, raw: raw), key: announceKey(for: s), text: Self.line(s, raw: raw), echo: echo)
+        let quiet = !speakDrawbars && drawbarKey(for: s) != nil
+        emit(.value(s, raw: raw), key: announceKey(for: s), text: quiet ? nil : Self.line(s, raw: raw), echo: echo)
     }
 
     /// What is said for a setting's new value. An Off/On setting is said as "Percussion on" or

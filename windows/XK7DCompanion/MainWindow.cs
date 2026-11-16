@@ -35,6 +35,7 @@ public sealed class MainWindow : Window
     public static readonly RoutedUICommand SetupCmd = Cmd("Set Up Organ for This App...", Key.U, ModifierKeys.Control | ModifierKeys.Shift);
     public static readonly RoutedUICommand MuteCmd = Cmd("Mute Announcements", Key.M, ModifierKeys.Control | ModifierKeys.Shift);
     public static readonly RoutedUICommand RepeatCmd = Cmd("Repeat Last Announcement", Key.L, ModifierKeys.Control | ModifierKeys.Shift);
+    public static readonly RoutedUICommand DrawbarSpeechCmd = Cmd("Speak Drawbar Changes", Key.D, ModifierKeys.Control | ModifierKeys.Shift);
     public static readonly RoutedUICommand MainCmd = Cmd("Main Window", Key.D1, ModifierKeys.Control);
     public static readonly RoutedUICommand SimulatorCmd = Cmd("Simulator", Key.D2, ModifierKeys.Control);
     public static readonly RoutedUICommand MinimizeCmd = Cmd("Minimize Window", Key.W, ModifierKeys.Control);
@@ -86,6 +87,9 @@ public sealed class MainWindow : Window
         muteItem = Item(MuteCmd);
         speech.Items.Add(muteItem);
         speech.Items.Add(Item(RepeatCmd));
+        var drawbarItem = Item(DrawbarSpeechCmd);
+        drawbarItem.IsCheckable = false;
+        speech.Items.Add(drawbarItem);
         var window = new MenuItem { Header = "_Window" };
         window.Items.Add(Item(MainCmd));
         window.Items.Add(Item(SimulatorCmd));
@@ -120,7 +124,11 @@ public sealed class MainWindow : Window
         foreach (var m in new[] { file, edit, organ, speech, window, help }) menu.Items.Add(m);
         organ.SubmenuOpened += (_, _) => disconnectItem.IsEnabled = model.Choice is not PortChoice.None;
         file.SubmenuOpened += (_, _) => snapshotItem.IsEnabled = model.Snapshot is not null;
-        speech.SubmenuOpened += (_, _) => muteItem.Header = model.Announcer.Muted ? "Un_mute Announcements" : "_Mute Announcements";
+        speech.SubmenuOpened += (_, _) =>
+        {
+            muteItem.Header = model.Announcer.Muted ? "Un_mute Announcements" : "_Mute Announcements";
+            drawbarItem.IsChecked = model.Session.SpeakDrawbars;
+        };
 
         Bind(FindCmd, FocusSearch);
         Bind(ListCmd, FocusList);
@@ -128,6 +136,7 @@ public sealed class MainWindow : Window
         Bind(SetupCmd, SetUpOrgan);
         Bind(MuteCmd, ToggleMute);
         Bind(RepeatCmd, model.RepeatLast);
+        Bind(DrawbarSpeechCmd, model.ToggleDrawbarSpeech);
         Bind(MainCmd, ShowMain);
         Bind(SimulatorCmd, () => ShowSimulator?.Invoke());
         Bind(MinimizeCmd, MinimizeKeepListening);
@@ -214,7 +223,7 @@ public sealed class MainWindow : Window
     static readonly Dictionary<RoutedUICommand, string> Headers = new()
     {
         [FindCmd] = "_Find Setting", [ListCmd] = "_Go to Settings List", [ReadCmd] = "_Read from Organ",
-        [SetupCmd] = "Set _Up Organ for This App...", [MuteCmd] = "_Mute Announcements", [RepeatCmd] = "_Repeat Last Announcement",
+        [SetupCmd] = "Set _Up Organ for This App...", [MuteCmd] = "_Mute Announcements", [RepeatCmd] = "_Repeat Last Announcement", [DrawbarSpeechCmd] = "Speak _Drawbar Changes",
         [MainCmd] = "_Main Window", [SimulatorCmd] = "_Simulator", [MinimizeCmd] = "Mi_nimize Window",
         [SaveCmd] = "_Save Organ Snapshot...", [SettingsCmd] = "Se_ttings...", [HelpCmd] = "XK-7D Companion _Help",
         [UpdatesCmd] = "Check for _Updates...",
@@ -515,7 +524,7 @@ public sealed class MainWindow : Window
         {
             "There are two ways to use this app. Play the organ and the app says each change you make. Or change settings here, and they go straight to the organ. You can mix the two.",
             "Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ list and press Enter. Then choose Organ, Set Up Organ for This App (Control Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that. If another program has the organ's MIDI port open, close it first.",
-            "Playing: changes are spoken name first, for example \"Upper 8 foot: 6\". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: \"Upper: Kinda Brian, F15\". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Control Shift L repeats the last announcement, and Control Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.",
+            "Playing: changes are spoken name first, for example \"Upper 8 foot: 6\". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: \"Upper: Kinda Brian, F15\". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Control Shift L repeats the last announcement, Control Shift M mutes, and Control Shift D turns drawbar speech off and on. Recent announcements, at the bottom of this window, lists everything said.",
             "Control W minimizes this window and the app keeps listening. The app sends nothing to the organ unless you change something here, apart from asking for a User patch's name.",
             "Speech: with a screen reader running, the app speaks through it. Without one, it uses the Windows voice; Settings has the voice, speed and loudness, and Control Shift M mutes.",
             "Changing settings here: Control F searches, Control L goes to the list. Each row reads name and value; \"not heard yet\" means the organ hasn't reported it. Tab reaches the editor. A slider or typed value is sent at once. In a list of choices, such as Organ Type, the arrow keys move without sending anything. Press Enter to send the one you're on, and the app says what it sent. Escape puts back what was there.",

@@ -124,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         muteItem = item("Mute Announcements", #selector(toggleMute(_:)), "m", [.command, .shift], target: self)
         speech.addItem(muteItem)
         speech.addItem(item("Repeat Last Announcement", #selector(repeatLast(_:)), "l", [.command, .shift], target: self))
+        speech.addItem(item("Speak Drawbar Changes", #selector(toggleDrawbarSpeech(_:)), "d", [.command, .shift], target: self))
         addSubmenu(speech, to: main)
 
         let window = NSMenu(title: "Window")
@@ -156,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch menuItem.action {
         case #selector(toggleMute(_:)):
             menuItem.title = model.announcer.muted ? "Unmute Announcements" : "Mute Announcements"
+            return true
+        case #selector(toggleDrawbarSpeech(_:)):
+            menuItem.state = model.session.speakDrawbars ? .on : .off
             return true
         case #selector(toggleMIDILog(_:)):
             menuItem.state = model.midiLog.isOn ? .on : .off
@@ -254,6 +258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func repeatLast(_ sender: Any?) { model.repeatLast() }
 
+    @objc func toggleDrawbarSpeech(_ sender: Any?) { model.toggleDrawbarSpeech() }
+
     @objc func toggleMIDILog(_ sender: Any?) {
         model.midiLog.isOn.toggle()
         model.announcer.announce(model.midiLog.isOn
@@ -345,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Setting up, once: connect the organ by USB. The app looks for it by name; if it doesn't find it, choose it in the Organ popup. Then choose Organ, Set Up Organ for This App (Command Shift U) and Send to Organ. Without this, the organ doesn't report every change. Record the System settings on the organ to keep it (manual page 142). Loading one of the organ's MIDI templates undoes it, so run Set Up Organ again after that.
 
-        Playing: changes are spoken name first, for example "Upper 8 foot: 6". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: "Upper: Kinda Brian, F15". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Command Shift L repeats the last announcement, and Command Shift M mutes. Recent announcements, at the bottom of this window, lists everything said.
+        Playing: changes are spoken name first, for example "Upper 8 foot: 6". A drawbar or knob is spoken once, when you stop moving it. Patches are said by name, then number: "Upper: Kinda Brian, F15". Factory names come from the manual; for User patches and Favorites the app asks the organ (Settings can turn that off), and says the number alone if no name comes back. The Leslie switch is said at once, in one word: Fast, Slow or Stop. When many settings change at once, you hear the first and how many others changed. Command Shift L repeats the last announcement, Command Shift M mutes, and Command Shift D turns drawbar speech off and on. Recent announcements, at the bottom of this window, lists everything said.
 
         Command W hides this window and the app keeps listening. If VoiceOver goes quiet while the app is in the background, turn on the Mac voice option in Settings. Command 1 or the Dock icon brings the window back. The app sends nothing to the organ unless you change something here, apart from asking for a User patch's name.
 

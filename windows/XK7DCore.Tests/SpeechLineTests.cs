@@ -76,6 +76,24 @@ public class SpeechLineTests
     }
 
     [Fact]
+    public void DrawbarSpeechCanBeTurnedOff()
+    {
+        session.Receive(Bytes("B0 0E 60"));
+        session.SpeakDrawbars = false;
+        session.Receive(Bytes("B0 23 7F"));
+        session.Receive(Bytes("F0 55 00 10 26 13 00 00 01 02 03 05 F7"));
+        Nrpn(0x11, 0x00, 1);
+        now += 1; session.Tick();
+        Assert.Equal(new[] { "Percussion on" }, spoken);
+        Assert.Equal(8, session.Drawbars["Pedal.1"]);
+        Assert.Equal(5, session.ValueOf(session.RegistrationSetting(DrawbarPart.Lower, 3)!));
+        session.SpeakDrawbars = true;
+        session.Receive(Bytes("B0 0E 20"));
+        now += 1; session.Tick();
+        Assert.Equal("Upper 8 foot: 2", spoken[^1]);
+    }
+
+    [Fact]
     public void OrganInNrpnModeIsNoticedOnce()
     {
         var told = 0;

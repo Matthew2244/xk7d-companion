@@ -58,6 +58,7 @@ public sealed class AppModel
         Session.OnMidi = (incoming, bytes) => MidiLog.Midi(incoming, bytes);
         Session.OnNameNote = MidiLog.Note;
         Session.AskOrganForPatchNames = !settings.Has("askOrganForPatchNames") || settings.GetBool("askOrganForPatchNames");
+        Session.SpeakDrawbars = !settings.Has("speakDrawbars") || settings.GetBool("speakDrawbars");
         Session.OnNrpnModeNoticed = () =>
         {
             if (Choice is PortChoice.Simulator) return;
@@ -249,6 +250,15 @@ public sealed class AppModel
         if (!IsConnected) { Announcer.Announce(NotConnectedMessage, force: true); return; }
         Session.Set(setting, text);
         ValuesChanged?.Invoke(new OrganEvent.Text(setting, Session.TextOf(setting) ?? text));
+    }
+
+    /// <summary>Turn drawbar speech on or off, remember it, and say the new state (even when muted).</summary>
+    public void ToggleDrawbarSpeech()
+    {
+        Session.SpeakDrawbars = !Session.SpeakDrawbars;
+        Settings.Set("speakDrawbars", Session.SpeakDrawbars);
+        Announcer.Announce(Session.SpeakDrawbars ? "Drawbar speech on" : "Drawbar speech off", force: true);
+        ConnectionChanged?.Invoke();
     }
 
     public void RepeatLast() => Announcer.Announce(History.FirstOrDefault() ?? "Nothing has been announced yet.", force: true);

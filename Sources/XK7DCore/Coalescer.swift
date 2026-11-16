@@ -57,6 +57,11 @@ public final class AnnouncementCoalescer {
         return true
     }
 
+    /// Drop everything waiting under keys that start with this (all drawbars, say).
+    public func cancel(keyPrefix: String) {
+        for k in pending.keys where k.hasPrefix(keyPrefix) { pending[k] = nil }
+    }
+
     /// Whether something is waiting under a key.
     public func isPending(key: String) -> Bool { pending[key] != nil }
 
