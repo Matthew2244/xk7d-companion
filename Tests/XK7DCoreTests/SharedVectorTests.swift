@@ -161,11 +161,12 @@ enum CoreVectors {
         }
         let cleanInputs = ["  Jazz    Lead  ", "Dr. L.S.       U", "A  L", "Organ  L", "\u{0}x\u{0}", ""]
         let cleaned = cleanInputs.map { [$0, PatchNames.clean($0)] }
-        // The spoken line for every setting at its lowest and highest value.
+        // The spoken line for every setting at its lowest and highest value, and the value said alone.
         var lines: [[Any]] = []
         for p in db.parameters where !p.isText {
             let st = Setting(p, indexValues: p.indices.map { $0.options.first!.raw })
-            lines.append([p.id, OrganSession.line(st, raw: p.rawRange.lowerBound), OrganSession.line(st, raw: p.rawRange.upperBound)])
+            lines.append([p.id, OrganSession.line(st, raw: p.rawRange.lowerBound), OrganSession.line(st, raw: p.rawRange.upperBound),
+                          OrganSession.valueOnly(st, raw: p.rawRange.lowerBound), OrganSession.valueOnly(st, raw: p.rawRange.upperBound)])
         }
         // The MIDI log for a stream of mixed messages, in both directions.
         let logStream: [UInt8] = [0xB0, 0x00, 0x00, 0xB0, 0x20, 0x00, 0xC0, 0x05, 0x90, 60, 100, 0x80, 60, 0, 0xFE,

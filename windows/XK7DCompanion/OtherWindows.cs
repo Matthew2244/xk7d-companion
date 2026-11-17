@@ -129,7 +129,7 @@ public sealed class SettingsWindow : Window
 {
     readonly AppModel model;
     readonly ComboBox methodBox, settleBox, deviceBox, voiceBox, speedBox, volumeBox;
-    readonly CheckBox namesBox, drawbarBox;
+    readonly CheckBox namesBox, drawbarBox, valueOnlyBox;
     List<string> voices = new();
     static readonly int[] Volumes = { 100, 75, 50, 25 };
     readonly List<ComboBox> channelBoxes = new();
@@ -168,6 +168,10 @@ public sealed class SettingsWindow : Window
             .Named("Speak drawbar changes", "Off keeps quiet about drawbars on all three parts, and still speaks everything else. Control Shift D switches it.");
         drawbarBox.Click += (_, _) => Changed();
         panel.Children.Add(drawbarBox);
+        valueOnlyBox = new CheckBox { Content = "Say only the value when the same control moves again", Margin = new Thickness(0, 4, 0, 4) }
+            .Named("Say only the value when the same control moves again", "The first move of a control says its name and value, like \"Upper 8 foot: 6\". Move it again before anything else is said and you hear just the number, like \"6\". Its name comes back after another control or message, or after 10 seconds without it. Off says the name every time.");
+        valueOnlyBox.Click += (_, _) => Changed();
+        panel.Children.Add(valueOnlyBox);
         namesBox = new CheckBox { Content = "Ask the organ for User patch names", Margin = new Thickness(0, 4, 0, 4) }
             .Named("Ask the organ for User patch names", "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.");
         namesBox.Click += (_, _) => Changed();
@@ -214,6 +218,7 @@ public sealed class SettingsWindow : Window
         volumeBox.SelectedIndex = Math.Max(Array.IndexOf(Volumes, model.Announcer.VolumePercent), 0);
         namesBox.IsChecked = model.Session.AskOrganForPatchNames;
         drawbarBox.IsChecked = model.Session.SpeakDrawbars;
+        valueOnlyBox.IsChecked = model.Session.SayValueOnlyOnRepeat;
         var settle = (int)Math.Round(model.Session.Coalescer.Settle * 1000);
         settleBox.SelectedIndex = Array.IndexOf(SettleChoices, SettleChoices.MinBy(c => Math.Abs(c - settle)));
         var a = model.Session.Addressing;
@@ -245,6 +250,8 @@ public sealed class SettingsWindow : Window
             model.Session.SpeakDrawbars = drawbarBox.IsChecked == true;
             model.Settings.Set("speakDrawbars", model.Session.SpeakDrawbars);
         }
+        model.Session.SayValueOnlyOnRepeat = valueOnlyBox.IsChecked == true;
+        model.Settings.Set("sayValueOnlyOnRepeat", model.Session.SayValueOnlyOnRepeat);
         model.Session.AskOrganForPatchNames = namesBox.IsChecked == true;
         model.Settings.Set("askOrganForPatchNames", model.Session.AskOrganForPatchNames);
         var settle = SettleChoices[Math.Max(settleBox.SelectedIndex, 0)];

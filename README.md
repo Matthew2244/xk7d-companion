@@ -93,6 +93,13 @@ A few things make it easier to follow while you play:
 - **A knob or drawbar you're moving is spoken once, when you stop.** You
   hear where it ended up, not every step on the way. Settings has how long it
   waits.
+- **Move the same control again and you hear just the number.** Pull the
+  Upper 8 foot drawbar and you hear "Upper 8 foot: 6". Pull it again and you
+  hear "4". A long sweep says the name once, then numbers. The name comes
+  back as soon as anything else is said, or after 10 seconds. Recent
+  announcements and Repeat Last always keep the full line. To hear the name
+  every time, turn off "Say only the value when the same control moves
+  again" in Settings.
 - **When lots of settings change at once**, as they may when you call up a
   patch, you hear the first one and how many others changed, not a list of
   forty.

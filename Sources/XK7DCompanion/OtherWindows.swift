@@ -131,6 +131,7 @@ final class SettingsWindowController: NSWindowController {
     private let volumePopup = NSPopUpButton()
     private let sampleButton = NSButton(title: "Say a Sample", target: nil, action: nil)
     private let drawbarCheckbox = NSButton(checkboxWithTitle: "Speak drawbar changes", target: nil, action: nil)
+    private let valueOnlyCheckbox = NSButton(checkboxWithTitle: "Say only the value when the same control moves again", target: nil, action: nil)
     private let namesCheckbox = NSButton(checkboxWithTitle: "Ask the organ for User patch names", target: nil, action: nil)
     private var voices: [(id: String, title: String)] = []
     private static let volumes = [100, 75, 50, 25]
@@ -142,7 +143,7 @@ final class SettingsWindowController: NSWindowController {
 
     init(model: AppModel) {
         self.model = model
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 580),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 620),
                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "\(AppIdentity.name) Settings"
         super.init(window: w)
@@ -193,6 +194,9 @@ final class SettingsWindowController: NSWindowController {
         help(sampleButton, "Say a Sample", "Says a patch change in the chosen voice, speed and loudness.")
         drawbarCheckbox.target = self; drawbarCheckbox.action = #selector(changed)
         help(drawbarCheckbox, "Speak drawbar changes", "Off keeps quiet about drawbars on all three parts, and still speaks everything else. Command Shift D switches it.")
+        valueOnlyCheckbox.target = self; valueOnlyCheckbox.action = #selector(changed)
+        help(valueOnlyCheckbox, "Say only the value when the same control moves again",
+             "The first move of a control says its name and value, like \"Upper 8 foot: 6\". Move it again before anything else is said and you hear just the number, like \"6\". Its name comes back after another control or message, or after 10 seconds without it. Off says the name every time.")
         namesCheckbox.target = self; namesCheckbox.action = #selector(changed)
         help(namesCheckbox, "Ask the organ for User patch names",
              "When a User patch or Favorite is chosen and the organ doesn't send its name, the app asks for it with a memory dump request. Factory patches are named without asking. Turn off if the organ shows a dump message on every patch change.")
@@ -224,6 +228,7 @@ final class SettingsWindowController: NSWindowController {
             hrow(makeLabel("Speed:"), speedPopup, makeLabel("Loudness:"), volumePopup, sampleButton),
             hrow(makeLabel("Wait before speaking, milliseconds:"), settleField, settleStepper),
             drawbarCheckbox,
+            valueOnlyCheckbox,
             namesCheckbox,
             makeLabel("MIDI", bold: true),
             hrow(makeLabel("Organ device ID:"), deviceField, deviceStepper),
@@ -269,6 +274,7 @@ final class SettingsWindowController: NSWindowController {
         volumePopup.selectItem(at: Self.volumes.firstIndex(of: model.announcer.volumePercent) ?? 0)
         namesCheckbox.state = model.session.askOrganForPatchNames ? .on : .off
         drawbarCheckbox.state = model.session.speakDrawbars ? .on : .off
+        valueOnlyCheckbox.state = model.session.sayValueOnlyOnRepeat ? .on : .off
         let settle = Int((model.session.coalescer.settle * 1000).rounded())
         settleStepper.integerValue = settle
         settleField.integerValue = settle
@@ -305,6 +311,8 @@ final class SettingsWindowController: NSWindowController {
             model.session.speakDrawbars = drawbarCheckbox.state == .on
             UserDefaults.standard.set(model.session.speakDrawbars, forKey: "speakDrawbars")
         }
+        model.session.sayValueOnlyOnRepeat = valueOnlyCheckbox.state == .on
+        UserDefaults.standard.set(model.session.sayValueOnlyOnRepeat, forKey: "sayValueOnlyOnRepeat")
         model.session.askOrganForPatchNames = namesCheckbox.state == .on
         UserDefaults.standard.set(model.session.askOrganForPatchNames, forKey: "askOrganForPatchNames")
         let settle = min(max(settleField.integerValue, 100), 2000)

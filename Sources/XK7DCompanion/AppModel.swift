@@ -26,6 +26,7 @@ final class AppModel {
     private var timer: Timer?
     private var lastSnapshot: DumpSnapshot?
     private var readTimeout: DispatchWorkItem?
+    private var announcingFromSession = false
 
     init() {
         let settle = UserDefaults.standard.object(forKey: "settleMilliseconds") as? Int ?? 350
@@ -40,11 +41,19 @@ final class AppModel {
 
         announcer.onAnnounced = { [weak self] text in
             guard let self else { return }
+            // Anything the app says itself (a confirmation, a status line) means the next setting
+            // change says its name again.
+            if !self.announcingFromSession { self.session.coalescer.breakRepeat() }
             self.history.insert(text, at: 0)
             if self.history.count > 200 { self.history.removeLast() }
             NotificationCenter.default.post(name: .historyChanged, object: nil)
         }
-        session.onAnnouncement = { [weak self] in self?.announcer.announce($0) }
+        session.onAnnouncement = { [weak self] text in
+            guard let self else { return }
+            self.announcingFromSession = true
+            self.announcer.announce(text, historyText: self.session.lastAnnouncement)
+            self.announcingFromSession = false
+        }
         // The Leslie speed cuts in at once (VoiceOver's high priority; the Mac's voice stops what it's saying).
         session.onUrgentAnnouncement = { [weak self] in self?.announcer.announce($0) }
         session.onMIDI = { [weak self] incoming, bytes in self?.midiLog.midi(incoming: incoming, bytes) }
@@ -56,6 +65,7 @@ final class AppModel {
         }
         session.askOrganForPatchNames = d.object(forKey: "askOrganForPatchNames") as? Bool ?? true
         session.speakDrawbars = d.object(forKey: "speakDrawbars") as? Bool ?? true
+        session.sayValueOnlyOnRepeat = d.object(forKey: "sayValueOnlyOnRepeat") as? Bool ?? true
         session.onEvent = { [weak self] event, _ in self?.eventArrived(event) }
         session.onChannelMismatch = { [weak self] channel in
             guard let self else { return }
@@ -350,7 +360,9 @@ final class AppModel {
             (2.5, { SimulatorAction.togglePercussion.perform(on: self.simulator!, database: self.database) }),
             (3.2, { SimulatorAction.nextPatch.perform(on: self.simulator!, database: self.database) }),
             (3.8, { SimulatorAction.moveDrawbar.perform(on: self.simulator!, database: self.database) }),
-            (4.5, { self.readFromOrgan { log.append("READ " + $0); write() } }),
+            // The same drawbar again, nothing said in between: only its value is said.
+            (4.4, { SimulatorAction.moveDrawbar.perform(on: self.simulator!, database: self.database) }),
+            (5.0, { self.readFromOrgan { log.append("READ " + $0); write() } }),
             (8.0, { log.append("SELFTEST DONE \(self.database.parameters.count) settings"); write(); NSApp.terminate(nil) }),
         ]
         for (t, f) in steps { DispatchQueue.main.asyncAfter(deadline: .now() + t) { f(); write() } }

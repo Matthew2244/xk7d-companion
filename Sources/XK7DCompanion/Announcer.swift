@@ -91,8 +91,10 @@ final class Announcer {
 
     /// `force` speaks even when muted (for things the user asked for, like Repeat Last).
     /// `polite` lets VoiceOver finish what it's saying first (the Windows version does the same).
-    func announce(_ text: String, force: Bool = false, polite: Bool = false) {
-        onAnnounced?(text)
+    /// `historyText` is what the history list and Repeat Last keep, when it differs from what is
+    /// said (a value said alone keeps its setting's name there).
+    func announce(_ text: String, force: Bool = false, polite: Bool = false, historyText: String? = nil) {
+        onAnnounced?(historyText ?? text)
         if let sink = silentSink { sink(text); return }
         if muted && !force { return }
         switch effectiveMethod {

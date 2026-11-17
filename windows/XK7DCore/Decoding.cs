@@ -54,17 +54,32 @@ public sealed class NrpnDecoder
 
 /// <summary>Keeps speech usable while a knob is turning. Each change is filed under a key (one per
 /// setting). A key speaks only after it has been quiet for Settle seconds, and only its latest
-/// text. If a key keeps changing for longer than MaxWait, its current value is spoken anyway.</summary>
+/// text. If a key keeps changing for longer than MaxWait, its current value is spoken anyway.
+///
+/// When the same setting speaks twice in a row, with nothing else said in between and less than
+/// RepeatQuietGap apart, the second time says only the value ("6", not "Upper 8 foot: 6"), if the
+/// change came with a value-only line and SayValueOnlyOnRepeat is on. A long sweep says the name once
+/// and then numbers. Anything else spoken in between (another setting, a burst summary, a status
+/// line: the owner calls BreakRepeat for those) gets the name back.</summary>
 public sealed class AnnouncementCoalescer
 {
     public double Settle { get; set; }
     public double MaxWait { get; set; }
     /// <summary>More than this many different settings changing together is spoken as one line.</summary>
     public int BurstLimit { get; set; } = 8;
+    /// <summary>Say only the value when the setting spoken last speaks again (see above). On by default.</summary>
+    public bool SayValueOnlyOnRepeat { get; set; } = true;
+    /// <summary>After this long without the setting speaking, its name is said again, even if nothing
+    /// else was said in between: by then you may not remember which control it was.</summary>
+    public const double RepeatQuietGap = 10;
+
+    /// <summary>One line ready to speak: what to say, and the full line (for history and Repeat Last).</summary>
+    public readonly record struct Line(string Text, string FullText);
 
     sealed class Pending
     {
         public required string Text;
+        public string? ValueOnly;
         public double FirstAt, LastAt;
         public int Order;
         /// <summary>Not spoken before this time (a patch change waiting for its name), unless released.</summary>
@@ -73,16 +88,21 @@ public sealed class AnnouncementCoalescer
 
     readonly Dictionary<string, Pending> pending = new();
     int counter;
+    /// <summary>The key spoken last and when, for value-only repeats. Null once anything else has been said.</summary>
+    string? lastSpokenKey;
+    double lastSpokenAt = double.NegativeInfinity;
 
     public AnnouncementCoalescer(double settle = 0.35, double maxWait = 2.0) { Settle = settle; MaxWait = maxWait; }
 
     public bool IsEmpty => pending.Count == 0;
 
-    public void Submit(string key, string text, double now, double? holdUntil = null)
+    /// <summary>File a change. valueOnly is what to say instead of text when this setting was the last
+    /// thing spoken ("6" for "Upper 8 foot: 6"); null means always say text in full.</summary>
+    public void Submit(string key, string text, double now, double? holdUntil = null, string? valueOnly = null)
     {
         counter++;
-        if (pending.TryGetValue(key, out var p)) { p.Text = text; p.LastAt = now; p.Order = counter; p.HeldUntil = holdUntil; }
-        else pending[key] = new Pending { Text = text, FirstAt = now, LastAt = now, Order = counter, HeldUntil = holdUntil };
+        if (pending.TryGetValue(key, out var p)) { p.Text = text; p.ValueOnly = valueOnly; p.LastAt = now; p.Order = counter; p.HeldUntil = holdUntil; }
+        else pending[key] = new Pending { Text = text, ValueOnly = valueOnly, FirstAt = now, LastAt = now, Order = counter, HeldUntil = holdUntil };
     }
 
     /// <summary>Change the text of something still waiting and stop holding it, keeping its place and
@@ -91,6 +111,7 @@ public sealed class AnnouncementCoalescer
     {
         if (!pending.TryGetValue(key, out var p)) return false;
         p.Text = text;
+        p.ValueOnly = null;
         p.HeldUntil = null;
         return true;
     }
@@ -109,30 +130,49 @@ public sealed class AnnouncementCoalescer
     /// <summary>Drop anything waiting under a key (for example, when it turned out to be our own echo).</summary>
     public void Cancel(string key) => pending.Remove(key);
 
+    /// <summary>Something other than this coalescer's lines was said (a status message, a line said at
+    /// once, the app's own confirmation): the next change says its setting's name again.</summary>
+    public void BreakRepeat() => lastSpokenKey = null;
+
     /// <summary>Texts ready to speak at now, oldest change first.</summary>
-    public List<string> Due(double now)
+    public List<string> Due(double now) => DueLines(now).Select(l => l.Text).ToList();
+
+    /// <summary>Lines ready to speak at now, oldest change first, each with its full text.</summary>
+    public List<Line> DueLines(double now)
     {
         if (pending.Count > BurstLimit)
         {
             // Wait for the whole burst to go quiet, then say it once.
             var newest = pending.Values.Max(p => p.LastAt);
             var oldest = pending.Values.Min(p => p.FirstAt);
-            if (!(now - newest >= Settle || now - oldest >= MaxWait)) return new List<string>();
-            if (pending.Values.Any(p => Held(p, now))) return new List<string>();
+            if (!(now - newest >= Settle || now - oldest >= MaxWait)) return new List<Line>();
+            if (pending.Values.Any(p => Held(p, now))) return new List<Line>();
             var texts = pending.Values.OrderBy(p => p.Order).Select(p => p.Text).ToList();
             pending.Clear();
-            return new List<string> { Summary(texts) };
+            lastSpokenKey = null;
+            var summary = Summary(texts);
+            return new List<Line> { new(summary, summary) };
         }
-        var ready = new List<(int, string)>();
+        var ready = new List<(string Key, Pending P)>();
         foreach (var (key, p) in pending.ToList())
         {
             if (!Held(p, now) && (now - p.LastAt >= Settle || now - p.FirstAt >= MaxWait))
             {
-                ready.Add((p.Order, p.Text));
+                ready.Add((key, p));
                 pending.Remove(key);
             }
         }
-        return ready.OrderBy(r => r.Item1).Select(r => r.Item2).ToList();
+        return ready.OrderBy(r => r.P.Order).Select(r => Spoken(r.Key, r.P, now)).ToList();
+    }
+
+    /// <summary>The line for one setting, value only if it repeats the setting spoken last.</summary>
+    Line Spoken(string key, Pending p, double now)
+    {
+        var repeats = SayValueOnlyOnRepeat && key == lastSpokenKey && now - lastSpokenAt < RepeatQuietGap;
+        lastSpokenKey = key;
+        lastSpokenAt = now;
+        if (repeats && p.ValueOnly is { } valueOnly) return new Line(valueOnly, p.Text);
+        return new Line(p.Text, p.Text);
     }
 
     /// <summary>"Upper: patch U05, and 40 more settings changed."</summary>
@@ -148,6 +188,7 @@ public sealed class AnnouncementCoalescer
     {
         var output = pending.Values.OrderBy(p => p.Order).Select(p => p.Text).ToList();
         pending.Clear();
+        lastSpokenKey = null;
         return output;
     }
 }

@@ -3,7 +3,8 @@
 Version 1.1.0 added a Windows version, and updates through Sparkle on the Mac
 and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1".
 1.2.0 answers the first report from a real XK-7D; see "Changes in 1.2.0".
-1.2.1 adds a switch for drawbar speech; see "Changes in 1.2.1". Both versions have been tested against the
+1.2.1 adds a switch for drawbar speech; see "Changes in 1.2.1". 1.3.0 says only
+the value when the same control moves again; see "Changes in 1.3.0". All of them have been tested against the
 built-in simulator only. Neither has been connected to a real XK-7D. The
 Windows version has been built and tested on GitHub's Windows runners, and
 nobody has used it yet with a screen reader on a real PC.
@@ -30,7 +31,8 @@ Three Swift modules in one package (`Package.swift`):
     complete on CC 6; two-byte ones wait for CC 38.
   - `Coalescer.swift`: speaks a turning knob once. Each setting speaks after
     350 ms of quiet, latest value only; a sweep longer than 2 s is spoken
-    anyway, then settles again.
+    anyway, then settles again. Since 1.3.0 it also decides when only the value
+    is said (see "Changes in 1.3.0").
   - `OrganSession.swift`: the heart. Decodes everything, keeps known values,
     sends changes by SysEx Data Set, hides echoes of its own changes (same
     value back within 2 s), produces announcement text, learns the organ's
@@ -355,7 +357,7 @@ manual's menu pages settled several items the MIDI tables left unclear.
 | Mac updates | Rehearsal on the Studio: tampered refused, good one installed (above) |
 | Windows updates | CI's update rehearsal (above) |
 
-Tests: Swift, 131 unit tests and 5 integration tests. C#, 150 tests (1.2.0).
+Tests: Swift, 142 unit tests and 5 integration tests. C#, 161 tests (1.3.0).
 
 ## Guessed or inferred (see PARAMETER-REVIEW.md for the full table)
 
@@ -541,6 +543,52 @@ might never answer and must still get your changes.
 The Developer ID comes from the Keychain, and the App Store Connect key from
 the Keychain entry `asc-api-key`. Nothing secret is in the repository or on
 GitHub.
+
+## Changes in 1.3.0
+
+Matthew's ask: "maybe only announce the first time something is moved, but if
+that same control is moved again, then the numbers get read out". So the first
+time a control speaks you hear the full line ("Upper 8 foot: 6"); if the next
+thing said is the same control again, you hear only the value ("4").
+
+- **Where it lives.** `AnnouncementCoalescer` (Swift `Coalescer.swift`, C#
+  `Decoding.cs`). `submit` takes an optional `valueOnly` line next to the full
+  text; `dueLines(at:)` / `DueLines` returns each line as spoken plus its full
+  text (`due` still returns the spoken texts). The coalescer remembers the key
+  it spoke last and when. A line is value-only when the setting is on, the
+  key is the one spoken last, less than `repeatQuietGap` (10 s, a constant)
+  has passed since, and the change came with a value-only form.
+- **The value-only text is built, never cut out of the full line.**
+  `OrganSession.valueOnly(_:raw:)` / `ValueOnly` builds it from the same parts
+  as `line`: the parameter's spoken value, or "on"/"off" for an Off/On
+  setting. Drawbar CCs give the level, CC 1 "slow"/"fast"/"N percent", the CC
+  switches "on"/"off", text settings the text or "blank". Patch changes,
+  burst summaries and Leslie speed lines have no value-only form, so they're
+  always full. The shared vectors now carry the value-only text of every
+  setting at both ends of its range.
+- **What brings the name back.** Any other line from the coalescer (another
+  setting, a burst summary, a patch change), `flush()`, `OrganSession.speak`
+  (status lines), the urgent Leslie line, and anything the app says itself:
+  `AppModel` (both platforms) calls `coalescer.breakRepeat()` from the
+  announcer's `onAnnounced` for every announcement that didn't come from the
+  session. And 10 s without that control speaking.
+- **A long sweep** speaks every `maxWait` (2 s); each of those interim lines
+  is the same key, so the first says the name and the rest are numbers.
+- **History and Repeat Last keep the full line.** `lastAnnouncement` holds
+  the full text; the app passes it to `announce(_:historyText:)`, so Recent
+  announcements and Repeat Last always say which control it was.
+- **Setting:** "Say only the value when the same control moves again", on by
+  default, saved as `sayValueOnlyOnRepeat`, a checkbox under "Speak drawbar
+  changes" in Settings on both systems. `OrganSession.sayValueOnlyOnRepeat`
+  passes it to the coalescer. Off says the full line every time, as 1.2.1 did.
+- **Tests:** `ValueOnlyRepeatTests` in both languages (first full, repeat
+  value only, another control in between, status and urgent lines, the app
+  saying something, the quiet gap, a long sweep, setting off, bursts and patch
+  changes, value-only forms built not cut, the coalescer alone). The
+  integration scenario's knob sweep now expects "400 rpm" with the full line
+  in `lastAnnouncement`. Both silent self-tests move the Upper 8 foot drawbar
+  twice; the Windows one fails unless the second is said as a number alone.
+  Swift 142 unit and 5 integration; C# 161.
 
 ## Changes in 1.2.1
 

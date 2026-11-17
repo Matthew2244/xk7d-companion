@@ -142,6 +142,7 @@ public final class OrganSession {
     public private(set) var values: [Address: Int] = [:]
     public private(set) var texts: [Address: String] = [:]
     public private(set) var drawbars: [String: Int] = [:]
+    /// The last line said, in full (a value-only repeat is stored with its setting's name).
     public private(set) var lastAnnouncement: String?
     public private(set) var currentDump: DumpSnapshot?
     public private(set) var organAnswered = false
@@ -317,13 +318,24 @@ public final class OrganSession {
             }
         }
         tickNames()
-        for text in coalescer.due(at: clock()) { speak(text) }
+        for line in coalescer.dueLines(at: clock()) {
+            lastAnnouncement = line.fullText
+            onAnnouncement?(line.text)
+        }
     }
 
-    /// Speak a line now, bypassing coalescing (used for the app's own status messages).
+    /// Speak a line now, bypassing coalescing (used for the app's own status messages). The next
+    /// setting change says its name again.
     public func speak(_ text: String) {
+        coalescer.breakRepeat()
         lastAnnouncement = text
         onAnnouncement?(text)
+    }
+
+    /// Say only the value when the setting spoken last changes again ("6", not "Upper 8 foot: 6").
+    public var sayValueOnlyOnRepeat: Bool {
+        get { coalescer.sayValueOnlyOnRepeat }
+        set { coalescer.sayValueOnlyOnRepeat = newValue }
     }
 
     private func handle(_ m: MIDIMessage) {
@@ -367,20 +379,20 @@ public final class OrganSession {
             let echo = isRecent(sentDrawbars[key].map { ($0.level == level, $0.at) })
             emit(.drawbar(part: d.part, index: d.index, level: level), key: "drawbar.\(key)",
                  text: speakDrawbars ? "\(d.part.rawValue) \(DrawbarCC.footageName(part: d.part, index: d.index)): \(level)" : nil,
-                 echo: echo)
+                 valueOnly: "\(level)", echo: echo)
             // Keep the registration setting in step with the drawbar.
             if let s = registrationSetting(part: d.part, index: d.index) { values[s.address] = level }
             return
         }
         switch controller {
         case 1:
-            let text: String
+            let speed: String
             switch value {
-            case 0: text = "Leslie speed: slow"
-            case 127: text = "Leslie speed: fast"
-            default: text = "Leslie speed: \(Int((Double(value) / 127 * 100).rounded())) percent"
+            case 0: speed = "slow"
+            case 127: speed = "fast"
+            default: speed = "\(Int((Double(value) / 127 * 100).rounded())) percent"
             }
-            emit(.leslieSpeed(value), key: "cc1", text: text, echo: false)
+            emit(.leslieSpeed(value), key: "cc1", text: "Leslie speed: \(speed)", valueOnly: speed, echo: false)
         case 49: onOff("Tone wheel brake", value)
         case 69: onOff("Sustain", value)
         case 85: onOff("ProChord", value)
@@ -396,7 +408,8 @@ public final class OrganSession {
 
     private func onOff(_ name: String, _ value: Int) {
         let on = value >= 64
-        emit(.controller(name: name, on: on), key: "cc.\(name)", text: "\(name): \(on ? "on" : "off")", echo: false)
+        emit(.controller(name: name, on: on), key: "cc.\(name)", text: "\(name): \(on ? "on" : "off")",
+             valueOnly: on ? "on" : "off", echo: false)
     }
 
     private func handleSysEx(_ bytes: [UInt8]) {
@@ -473,7 +486,8 @@ public final class OrganSession {
             return
         }
         let quiet = !speakDrawbars && drawbarKey(for: s) != nil
-        emit(.value(s, raw: raw), key: announceKey(for: s), text: quiet ? nil : Self.line(s, raw: raw), echo: echo)
+        emit(.value(s, raw: raw), key: announceKey(for: s), text: quiet ? nil : Self.line(s, raw: raw),
+             valueOnly: Self.valueOnly(s, raw: raw), echo: echo)
     }
 
     /// What is said for a setting's new value. An Off/On setting is said as "Percussion on" or
@@ -486,6 +500,16 @@ public final class OrganSession {
             return "\(name) \(raw == 1 ? "on" : "off")"
         }
         return "\(s.spokenName): \(s.parameter.spoken(raw))"
+    }
+
+    /// The value alone, said when the same setting changes again right after ("6", "on"). Built
+    /// from the same parts as `line`, never by cutting the name off it.
+    public static func valueOnly(_ s: Setting, raw: Int) -> String {
+        if case .choices(let options) = s.parameter.kind, options.count == 2,
+           options[0].raw == 0, options[0].label == "Off", options[1].raw == 1, options[1].label == "On", raw == 0 || raw == 1 {
+            return raw == 1 ? "on" : "off"
+        }
+        return s.parameter.spoken(raw)
     }
 
     // MARK: Leslie speed
@@ -512,6 +536,7 @@ public final class OrganSession {
     /// same meaning.
     private func speakUrgently(_ text: String) {
         coalescer.cancel(key: "cc.Leslie fast")
+        coalescer.breakRepeat()
         lastAnnouncement = text
         if let urgent = onUrgentAnnouncement { urgent(text) } else { onAnnouncement?(text) }
     }
@@ -524,7 +549,8 @@ public final class OrganSession {
             return
         }
         let echo = isRecent(sentTexts[s.address].map { ($0.text == text, $0.at) })
-        emit(.text(s, text), key: s.address.description, text: "\(s.spokenName): \(text.isEmpty ? "blank" : text)", echo: echo)
+        emit(.text(s, text), key: s.address.description, text: "\(s.spokenName): \(text.isEmpty ? "blank" : text)",
+             valueOnly: text.isEmpty ? "blank" : text, echo: echo)
     }
 
     private func isRecent(_ match: (Bool, TimeInterval)?) -> Bool {
@@ -532,13 +558,13 @@ public final class OrganSession {
         return clock() - at <= echoWindow
     }
 
-    private func emit(_ e: OrganEvent, key: String?, text: String?, echo: Bool) {
+    private func emit(_ e: OrganEvent, key: String?, text: String?, valueOnly: String? = nil, echo: Bool) {
         onEvent?(e, echo)
         guard let key, let text else { return }
         if echo {
             coalescer.cancel(key: key)
         } else {
-            coalescer.submit(key: key, text: text, at: clock())
+            coalescer.submit(key: key, text: text, valueOnly: valueOnly, at: clock())
         }
     }
 

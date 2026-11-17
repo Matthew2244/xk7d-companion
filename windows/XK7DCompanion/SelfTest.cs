@@ -45,7 +45,9 @@ static class SelfTest
             (2.5, () => SimulatorAction.TogglePercussion.Perform(model.Simulator!, db, model.Settings, app.Dispatcher)),
             (3.2, () => SimulatorAction.NextPatch.Perform(model.Simulator!, db, model.Settings, app.Dispatcher)),
             (3.8, () => SimulatorAction.MoveDrawbar.Perform(model.Simulator!, db, model.Settings, app.Dispatcher)),
-            (4.5, () => model.ReadFromOrgan(summary => { log.Add("READ " + summary); Write(); })),
+            // The same drawbar again, nothing said in between: only its value is said.
+            (4.4, () => SimulatorAction.MoveDrawbar.Perform(model.Simulator!, db, model.Settings, app.Dispatcher)),
+            (5.0, () => model.ReadFromOrgan(summary => { log.Add("READ " + summary); Write(); })),
             (8.0, () => { log.Add($"SELFTEST DONE {db.Parameters.Count} settings"); Finish(); }),
         };
         var exit = 1;
@@ -68,6 +70,11 @@ static class SelfTest
             // A knob sweep must be spoken once, not thirty times.
             var horn = log.Count(l => l.StartsWith("ANNOUNCE Leslie horn fast speed: ", StringComparison.Ordinal));
             if (horn != 1) missing.Add($"the knob sweep spoken once (it was spoken {horn} times)");
+            // The drawbar moved twice in a row: its name once, then the value alone.
+            var bar = log.FindIndex(l => l.StartsWith("ANNOUNCE Upper 8 foot: ", StringComparison.Ordinal));
+            var next = bar < 0 ? null : log.Skip(bar + 1).FirstOrDefault(l => l.StartsWith("ANNOUNCE ", StringComparison.Ordinal));
+            if (next is null || !int.TryParse(next["ANNOUNCE ".Length..], out _))
+                missing.Add($"the drawbar's second move said as the value alone (it was \"{next ?? "nothing"}\")");
             // The User patch is said by the name the simulator's dump carries, then its number.
             if (!log.Any(l => l.StartsWith("ANNOUNCE Upper: ", StringComparison.Ordinal) && l.Contains(", U", StringComparison.Ordinal)
                               && !l.Contains("patch U", StringComparison.Ordinal)))

@@ -48,12 +48,14 @@ class SimulatorScenario: XCTestCase {
         organ.panelChange(hornFast, raw: 141)
         XCTAssertTrue(waitUntil { self.spoken.contains("Leslie horn fast speed: 340 rpm") }, "spoken: \(spoken)")
 
-        // 4. A knob turned through many values: one announcement, the final value.
+        // 4. A knob turned through many values: one announcement, the final value. The same knob
+        // was the last thing said, so only the value is said; the full line is kept.
         spoken.removeAll()
         for v in organ.knobSweep(hornFast, to: 201, steps: 30) { organ.panelChange(hornFast, raw: v) }
         XCTAssertTrue(waitUntil { !self.spoken.isEmpty })
         RunLoop.main.run(until: Date().addingTimeInterval(0.6)); session.tick()
-        XCTAssertEqual(spoken, ["Leslie horn fast speed: 400 rpm"])
+        XCTAssertEqual(spoken, ["400 rpm"])
+        XCTAssertEqual(session.lastAnnouncement, "Leslie horn fast speed: 400 rpm")
 
         // 5. In NRPN mode (the template default), NRPN parameters are announced too...
         spoken.removeAll()

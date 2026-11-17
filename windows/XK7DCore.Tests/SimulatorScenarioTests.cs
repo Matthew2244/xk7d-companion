@@ -62,12 +62,14 @@ public class SimulatorScenarioTests
         organ.PanelChange(hornFast, 141);
         Assert.True(WaitUntil(() => spoken.Contains("Leslie horn fast speed: 340 rpm")), string.Join(" | ", spoken));
 
-        // 4. A knob turned through many values: one announcement, the final value.
+        // 4. A knob turned through many values: one announcement, the final value. The same knob
+        // was the last thing said, so only the value is said; the full line is kept.
         spoken.Clear();
         foreach (var v in organ.KnobSweep(hornFast, 201, 30)) organ.PanelChange(hornFast, v);
         Assert.True(WaitUntil(() => spoken.Count > 0));
         Settle(0.6);
-        Assert.Equal(new[] { "Leslie horn fast speed: 400 rpm" }, spoken);
+        Assert.Equal(new[] { "400 rpm" }, spoken);
+        Assert.Equal("Leslie horn fast speed: 400 rpm", session.LastAnnouncement);
 
         // 5. In NRPN mode (the template default), NRPN parameters are announced too...
         spoken.Clear();

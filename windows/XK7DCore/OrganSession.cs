@@ -150,6 +150,7 @@ public sealed class OrganSession
     public IReadOnlyDictionary<Address, int> Values => values;
     public IReadOnlyDictionary<Address, string> Texts => texts;
     public IReadOnlyDictionary<string, int> Drawbars => drawbars;
+    /// <summary>The last line said, in full (a value-only repeat is stored with its setting's name).</summary>
     public string? LastAnnouncement { get; private set; }
     public DumpSnapshot? CurrentDump { get; private set; }
     public bool OrganAnswered { get; private set; }
@@ -343,12 +344,18 @@ public sealed class OrganSession
             }
         }
         TickNames();
-        foreach (var text in Coalescer.Due(Clock())) Speak(text);
+        foreach (var line in Coalescer.DueLines(Clock()))
+        {
+            LastAnnouncement = line.FullText;
+            OnAnnouncement?.Invoke(line.Text);
+        }
     }
 
-    /// <summary>Speak a line now, bypassing coalescing (used for the app's own status messages).</summary>
+    /// <summary>Speak a line now, bypassing coalescing (used for the app's own status messages). The
+    /// next setting change says its name again.</summary>
     public void Speak(string text)
     {
+        Coalescer.BreakRepeat();
         LastAnnouncement = text;
         OnAnnouncement?.Invoke(text);
     }
@@ -397,7 +404,8 @@ public sealed class OrganSession
             drawbars[key] = level;
             var echo = IsRecent(sentDrawbars.TryGetValue(key, out var sd) ? (sd.Level == level, sd.At) : null);
             Emit(new OrganEvent.Drawbar(d.Part, d.Index, level), $"drawbar.{key}",
-                 SpeakDrawbars ? $"{d.Part.Raw()} {DrawbarCC.FootageName(d.Part, d.Index)}: {level}" : null, echo);
+                 SpeakDrawbars ? $"{d.Part.Raw()} {DrawbarCC.FootageName(d.Part, d.Index)}: {level}" : null, echo,
+                 valueOnly: $"{level}");
             // Keep the registration setting in step with the drawbar.
             if (RegistrationSetting(d.Part, d.Index) is { } reg) values[reg.Address] = level;
             return;
@@ -406,13 +414,13 @@ public sealed class OrganSession
         {
             case 1:
             {
-                var text = value switch
+                var speed = value switch
                 {
-                    0 => "Leslie speed: slow",
-                    127 => "Leslie speed: fast",
-                    _ => $"Leslie speed: {(int)SwiftText.Round(value / 127.0 * 100)} percent",
+                    0 => "slow",
+                    127 => "fast",
+                    _ => $"{(int)SwiftText.Round(value / 127.0 * 100)} percent",
                 };
-                Emit(new OrganEvent.LeslieSpeed(value), "cc1", text, false);
+                Emit(new OrganEvent.LeslieSpeed(value), "cc1", $"Leslie speed: {speed}", false, valueOnly: speed);
                 break;
             }
             case 49: OnOff("Tone wheel brake", value); break;
@@ -433,7 +441,8 @@ public sealed class OrganSession
     void OnOff(string name, int value)
     {
         var on = value >= 64;
-        Emit(new OrganEvent.Controller(name, on), $"cc.{name}", $"{name}: {(on ? "on" : "off")}", false);
+        Emit(new OrganEvent.Controller(name, on), $"cc.{name}", $"{name}: {(on ? "on" : "off")}", false,
+             valueOnly: on ? "on" : "off");
     }
 
     void HandleSysEx(byte[] bytes)
@@ -513,7 +522,8 @@ public sealed class OrganSession
             return;
         }
         var quiet = !SpeakDrawbars && DrawbarKey(s) is not null;
-        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), quiet ? null : Line(s, raw), echo);
+        Emit(new OrganEvent.Value(s, raw), AnnounceKey(s), quiet ? null : Line(s, raw), echo,
+             valueOnly: ValueOnly(s, raw));
     }
 
     /// <summary>What is said for a setting's new value. An Off/On setting is "Percussion on", not "Percussion on: On".</summary>
@@ -529,6 +539,24 @@ public sealed class OrganSession
             return $"{name} {(raw == 1 ? "on" : "off")}";
         }
         return $"{s.SpokenName}: {s.Parameter.Spoken(raw)}";
+    }
+
+    /// <summary>The value alone, said when the same setting changes again right after ("6", "on"). Built
+    /// from the same parts as Line, never by cutting the name off it.</summary>
+    public static string ValueOnly(Setting s, int raw)
+    {
+        var k = s.Parameter.Kind;
+        if (k.Type == ValueType.Choices && k.Options.Count == 2 && k.Options[0].Raw == 0 && k.Options[0].Label == "Off"
+            && k.Options[1].Raw == 1 && k.Options[1].Label == "On" && (raw == 0 || raw == 1))
+            return raw == 1 ? "on" : "off";
+        return s.Parameter.Spoken(raw);
+    }
+
+    /// <summary>Say only the value when the setting spoken last changes again ("6", not "Upper 8 foot: 6").</summary>
+    public bool SayValueOnlyOnRepeat
+    {
+        get => Coalescer.SayValueOnlyOnRepeat;
+        set => Coalescer.SayValueOnlyOnRepeat = value;
     }
 
     // Leslie speed
@@ -555,6 +583,7 @@ public sealed class OrganSession
     void SpeakUrgently(string text)
     {
         Coalescer.Cancel("cc.Leslie fast");
+        Coalescer.BreakRepeat();
         LastAnnouncement = text;
         if (OnUrgentAnnouncement is { } urgent) urgent(text); else OnAnnouncement?.Invoke(text);
     }
@@ -705,7 +734,8 @@ public sealed class OrganSession
             return;
         }
         var echo = IsRecent(sentTexts.TryGetValue(s.Address, out var st) ? (st.Text == text, st.At) : null);
-        Emit(new OrganEvent.Text(s, text), s.Address.ToString(), $"{s.SpokenName}: {(text.Length == 0 ? "blank" : text)}", echo);
+        Emit(new OrganEvent.Text(s, text), s.Address.ToString(), $"{s.SpokenName}: {(text.Length == 0 ? "blank" : text)}", echo,
+             valueOnly: text.Length == 0 ? "blank" : text);
     }
 
     bool IsRecent((bool Same, double At)? match)
@@ -714,12 +744,12 @@ public sealed class OrganSession
         return Clock() - m.At <= EchoWindow;
     }
 
-    void Emit(OrganEvent e, string? key, string? text, bool echo)
+    void Emit(OrganEvent e, string? key, string? text, bool echo, string? valueOnly = null)
     {
         OnEvent?.Invoke(e, echo);
         if (key is null || text is null) return;
         if (echo) Coalescer.Cancel(key);
-        else Coalescer.Submit(key, text, Clock());
+        else Coalescer.Submit(key, text, Clock(), valueOnly: valueOnly);
     }
 
     void LearnDevice(byte dev)

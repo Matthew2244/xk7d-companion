@@ -24,6 +24,7 @@ public sealed class AppModel
     DumpSnapshot? lastSnapshot;
     DispatcherTimer? readTimer;
     List<string> lastDeviceNames = new();
+    bool announcingFromSession;
 
     public event Action? ConnectionChanged;
     /// <summary>A value changed: the event, or null when many may have.</summary>
@@ -48,17 +49,26 @@ public sealed class AppModel
 
         Announcer.OnAnnounced = text =>
         {
+            // Anything the app says itself (a confirmation, a status line) means the next setting
+            // change says its name again.
+            if (!announcingFromSession) Session.Coalescer.BreakRepeat();
             History.Insert(0, text);
             if (History.Count > 200) History.RemoveAt(History.Count - 1);
             HistoryChanged?.Invoke();
         };
-        Session.OnAnnouncement = text => Announcer.Announce(text);
+        Session.OnAnnouncement = text =>
+        {
+            announcingFromSession = true;
+            try { Announcer.Announce(text, historyText: Session.LastAnnouncement); }
+            finally { announcingFromSession = false; }
+        };
         // The Leslie speed cuts in at once.
         Session.OnUrgentAnnouncement = text => Announcer.Announce(text);
         Session.OnMidi = (incoming, bytes) => MidiLog.Midi(incoming, bytes);
         Session.OnNameNote = MidiLog.Note;
         Session.AskOrganForPatchNames = !settings.Has("askOrganForPatchNames") || settings.GetBool("askOrganForPatchNames");
         Session.SpeakDrawbars = !settings.Has("speakDrawbars") || settings.GetBool("speakDrawbars");
+        Session.SayValueOnlyOnRepeat = !settings.Has("sayValueOnlyOnRepeat") || settings.GetBool("sayValueOnlyOnRepeat");
         Session.OnNrpnModeNoticed = () =>
         {
             if (Choice is PortChoice.Simulator) return;

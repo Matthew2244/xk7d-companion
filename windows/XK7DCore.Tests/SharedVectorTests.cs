@@ -218,6 +218,8 @@ public class SharedVectorTests
             var st = new Setting(p, p.Indices.Select(d => d.Options[0].Raw).ToArray());
             Assert.Equal(Str(l[1]), OrganSession.Line(st, p.RawMin));
             Assert.Equal(Str(l[2]), OrganSession.Line(st, p.RawMax));
+            Assert.Equal(Str(l[3]), OrganSession.ValueOnly(st, p.RawMin));
+            Assert.Equal(Str(l[4]), OrganSession.ValueOnly(st, p.RawMax));
             count++;
         }
         Assert.True(count > 500, $"only {count}");

@@ -311,10 +311,12 @@ public sealed class Announcer
     public string? LastVoice { get; private set; }
 
     /// <summary>force speaks even when muted (for things the person asked for, like Repeat Last).
-    /// polite lets the screen reader finish what it is saying first.</summary>
-    public void Announce(string text, bool force = false, bool polite = false)
+    /// polite lets the screen reader finish what it is saying first. historyText is what the history
+    /// list and Repeat Last keep, when it differs from what is said (a value said alone keeps its
+    /// setting's name there).</summary>
+    public void Announce(string text, bool force = false, bool polite = false, string? historyText = null)
     {
-        OnAnnounced?.Invoke(text);
+        OnAnnounced?.Invoke(historyText ?? text);
         if (SilentSink is { } sink) { sink(text); return; }
         if (Muted && !force) return;
         if (string.IsNullOrWhiteSpace(text)) return;
