@@ -8,8 +8,9 @@ those settings from the keyboard.
 There's a Mac version for VoiceOver and a Windows version for NVDA, JAWS and
 Narrator.
 
-**It hasn't been tried on a real organ yet.** It follows the XK-7D Owner's
-Manual, which has gaps and a few contradictions.
+**It's been tried on a real XK-7D, and it worked the first time.** It follows
+the XK-7D Owner's Manual, which has gaps and a few contradictions, and some of
+those still haven't been checked on an organ.
 [docs/PARAMETER-REVIEW.md](docs/PARAMETER-REVIEW.md) lists every one.
 
 **The Windows version is new.** It's been built and tested on GitHub's
