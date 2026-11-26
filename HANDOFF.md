@@ -4,10 +4,16 @@ Version 1.1.0 added a Windows version, and updates through Sparkle on the Mac
 and WinSparkle on Windows. 1.1.1 is a review release; see "Changes in 1.1.1".
 1.2.0 answers the first report from a real XK-7D; see "Changes in 1.2.0".
 1.2.1 adds a switch for drawbar speech; see "Changes in 1.2.1". 1.3.0 says only
-the value when the same control moves again; see "Changes in 1.3.0". All of them have been tested against the
-built-in simulator only. Neither has been connected to a real XK-7D. The
-Windows version has been built and tested on GitHub's Windows runners, and
-nobody has used it yet with a screen reader on a real PC.
+the value when the same control moves again; see "Changes in 1.3.0".
+
+The Mac version has been used on a real XK-7D (Delroy W's, 2026-11-16) and
+worked the first time; see "What the real organ showed" below. That was a
+sighted player hearing the Mac's voice, so VoiceOver itself hasn't been tried
+with a real organ, and no MIDI log from the organ has come back yet, so most
+of "Needs a real organ to confirm" is still open. 1.2.1 and 1.3.0 came after
+that session and have been tested against the simulator only. The Windows
+version has been built and tested on GitHub's Windows runners, and nobody has
+used it yet with a screen reader on a real PC or with a real organ.
 
 ## Architecture
 
@@ -381,6 +387,27 @@ Tests: Swift, 142 unit tests and 5 integration tests. C#, 161 tests (1.3.0).
   Acknowledge but not who sends it or when.
 - Identity Request to all-call 7F as well as the configured ID.
 
+## What the real organ showed (2026-11-16)
+
+Matthew's friend Delroy used 1.1.2 on his XK-7D with a Mac, hearing the Mac's
+voice (no VoiceOver). It connected and spoke changes on the first try. What
+that settles, and what it doesn't:
+
+- **Settled:** the organ's USB MIDI port works with CoreMIDI and the app;
+  Leslie switching is transmitted and was spoken; patch changes arrive as
+  Bank Select plus Program Change on a channel the app's defaults know (they
+  were said "F1", "U2", which is what led to patch names in 1.2.0). His
+  words: "it's working amazing".
+- **Consistent with the manual, not proven:** moving through the menus says
+  nothing (the manual has no message for it), and the Custom Pedal
+  Registration's sub drawbars said nothing (no NRPN, so silent in NRPN mode;
+  whether Set Up Organ's SysEx mode makes them speak hasn't been tried).
+- **Not recorded:** whether the app picked the organ by itself or it was
+  chosen in the Organ list, the port's exact name, which Leslie message the
+  organ sent, and anything about the dump. No MIDI log came back (Help, Keep a
+  MIDI Log arrived in 1.2.0, the same day). The next session with an organ
+  should keep a log; it answers most of the list below.
+
 ## Needs a real organ to confirm
 
 1. **Whether every panel edit is transmitted**, and how: with Individual
@@ -418,7 +445,17 @@ Tests: Swift, 142 unit tests and 5 integration tests. C#, 161 tests (1.3.0).
    most of it.
 9. The XK-7D's USB MIDI port name, so the app recognises it on first launch.
    It matches anything containing "XK-7", "Hammond" or "Suzuki", in any case,
-   with or without spaces and hyphens.
+   with or without spaces and hyphens. The 2026-11-16 session connected, but
+   nobody wrote down whether that match did it.
+10. **Which message the Leslie switch sends.** NRPN 12 0A (Leslie Fast) is
+    said at once as "Fast", "Slow" or "Stop". CC 1 (p. 176: "continuous speed
+    of the Digital Leslie", transmitted) is said "Leslie speed: fast" after
+    the settle wait. If the organ sends both for one press, both are said.
+    The real organ's Leslie changes were heard, but before 1.2.0 and without
+    a log, so it isn't known which it was. If both turn out to come, the
+    urgent line should swallow the CC 1 that follows it. (`speakUrgently`
+    cancels the key `cc.Leslie fast`, which nothing files under; it's
+    harmless, and the place that change would go.)
 
 ## Changes in 1.0.1 (independent review)
 

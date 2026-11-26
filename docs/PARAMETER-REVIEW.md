@@ -176,3 +176,7 @@ Zone templates also turn Tx Upper, Lower and Pedal off.
 
 Everything in the "Guess" and "Inferred" rows above, plus whatever is in
 HANDOFF.md under "Needs a real organ".
+
+The app was used on a real XK-7D on 2026-11-16 and worked, but no MIDI log
+was kept, so none of the rows above was settled by it. HANDOFF.md, "What the
+real organ showed", lists what that session did settle.
